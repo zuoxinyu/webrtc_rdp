@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.0)
 
-project(chatz
+project(dezk
     VERSION 0.1
 )
 
@@ -44,9 +44,7 @@ endif()
 aux_source_directory(src/client DIR_SRCS)
 aux_source_directory(src/server SERVER_DIR_SRCS)
 
-add_executable(${PROJECT_NAME}
-    microui/src/microui.c
-    ${DIR_SRCS})
+add_executable(${PROJECT_NAME} ${DIR_SRCS})
 
 add_executable(chat_server ${SERVER_DIR_SRCS})
 
@@ -64,10 +62,6 @@ if(WIN32)
     target_link_libraries(${PROJECT_NAME} PRIVATE SDL2::SDL2_ttf)
     target_link_libraries(${PROJECT_NAME} PRIVATE GL)
     target_link_libraries(${PROJECT_NAME} PRIVATE rt)
-    #target_link_libraries(${PROJECT_NAME} PRIVATE websockets_shared)
-    #target_link_libraries(${PROJECT_NAME} PRIVATE cjson)
-    #target_link_libraries(${PROJECT_NAME} PRIVATE ${FFMPEG_libavcodec_LIBRARY})
-    #target_link_libraries(${PROJECT_NAME} PRIVATE ${FFMPEG_libavutil_LIBRARY})
 endif()
 
 if(UNIX)
@@ -81,20 +75,4 @@ if(UNIX)
     target_link_libraries(${PROJECT_NAME} PRIVATE glib-2.0 gobject-2.0 gmodule-2.0 gio-2.0)
     target_link_libraries(${PROJECT_NAME} PRIVATE xcb X11 Xext Xfixes Xdamage Xrandr Xrender Xau Xdmcp Xcomposite Xtst)
     target_link_libraries(${PROJECT_NAME} PRIVATE gbm)
-    #target_link_libraries(${PROJECT_NAME} PRIVATE websockets)
-    #target_link_libraries(${PROJECT_NAME} PRIVATE avcodec avutil)
-    #target_link_libraries(${PROJECT_NAME} PRIVATE cjson)
 endif()
-
-
-####### CPACK SETTINGS ########
-# set(CPACK_PACKAGE_NAME $(PROJECT_NAME))
-# set(CPACK_SET_DESTDIR ON)
-# set(CPACK_INSTALL_PREFIX "/usr/local")
-# set(CPACK_PACKAGE_VERSION ${PROJECT_VERSION})
-# set(CPACK_RPM_PACKAGE_GROUP "zuoxinyu")
-# set(CPACK_PACKAGE_VENDOR "zuoxinyu")
-# set(CPACK_RPM_PACKAGE_LICENSE "Apache 2.0 + Common Clause 1.0")
-# 
-# install(TARGETS ${PROJECT_NAME})
-# include(CPack)

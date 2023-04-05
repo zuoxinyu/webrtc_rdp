@@ -1,9 +1,7 @@
 #include "renderer.h"
 #include "atlas.inl"
 #include <SDL2/SDL.h>
-// #include <SDL2/SDL_opengl.h>
 #include <GL/glew.h>
-#include <SDL2/SDL_video.h>
 #include <assert.h>
 
 #define BUFFER_SIZE 16384
