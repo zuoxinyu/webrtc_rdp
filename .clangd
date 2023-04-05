@@ -1,0 +1,36 @@
+CompileFlags:
+  # Treat code as C++, use C++17 standard, enable more warnings.
+  Add:
+   - -xc++
+   - -std=c++20
+   - -ferror-limit=0
+   - -I/home/doubleleft/libwebrtc_build/src
+   - -Imicroui/src
+   - -Isrc
+   - -DWEBRTC_POSIX
+   - -DWEBRTC_LINUX
+   - -Wno-deprecated-builtins
+   - -Wno-deprecated-declarations
+  # Remove: 
+  # Remove extra warnings specified in compile commands.
+  # Single value is also acceptable, same as "Remove: [-mabi]"
+  #Remove: -mabi
+  #Compiler: clang++
+Index:
+  StandardLibrary: No
+Diagnostics:
+  # Tweak Clang-Tidy checks.
+  ClangTidy:
+    Add: [performance*, ] #modernize*, ]
+    Remove: [modernize-use-trailing-return-type, modernize-deprecated-headers, modernize-avoid-c-arrays, readability-*]
+    CheckOptions:
+      readability-identifier-naming.VariableCase: CamelCase
+
+InlayHints:
+  Designators: Yes
+  Enabled: Yes
+  ParameterNames: Yes
+  DeducedTypes: Yes
+
+Hover:
+  ShowAKA: Yes
