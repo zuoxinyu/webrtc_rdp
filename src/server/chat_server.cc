@@ -64,14 +64,15 @@ asio::awaitable<void> ChatServer::do_listen()
         std::cout << "new connection from ["
                   << stream.socket().remote_endpoint().address() << "] "
                   << std::endl;
-        asio::co_spawn(
-            ctx_, do_session(std::move(stream)), [](std::exception_ptr e) {
-                try {
-                    std::rethrow_exception(e);
-                } catch (const std::exception &err) {
-                    std::cerr << "Error in session: " << err.what() << "\n";
-                }
-            });
+        asio::co_spawn(ctx_, do_session(std::move(stream)),
+                       [](const std::exception_ptr &e) {
+                           try {
+                               std::rethrow_exception(e);
+                           } catch (const std::exception &err) {
+                               std::cerr << "Error in session: " << err.what()
+                                         << "\n";
+                           }
+                       });
     }
 }
 

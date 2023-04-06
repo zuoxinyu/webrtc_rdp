@@ -1,7 +1,9 @@
 #include "video_capturer.hh"
 
 #include <algorithm>
+#include <cstdlib>
 #include <iostream>
+#include <libyuv/convert.h>
 #include <thread>
 #include <vector>
 
@@ -28,8 +30,11 @@ class ScreenCaptureImpl : public rtc::VideoSourceInterface<webrtc::VideoFrame>,
     ScreenCaptureImpl(CaptureType kind = CaptureType::kScreen)
         : desktop_capturer_(nullptr), thread_(), sinks_()
     {
-        std::cout << "ScreenCaptureImpl:" << std::endl;
         auto opts = webrtc::DesktopCaptureOptions::CreateDefault();
+        std::string display = std::getenv("DISPLAY");
+        std::cout << "display: " << display << std::endl;
+        auto xdisplay = webrtc::SharedXDisplay::Create(display);
+        opts.set_x_display(xdisplay);
 
         if (kind == CaptureType::kScreen) {
             desktop_capturer_ =
@@ -39,15 +44,14 @@ class ScreenCaptureImpl : public rtc::VideoSourceInterface<webrtc::VideoFrame>,
                 webrtc::DesktopCapturer::CreateWindowCapturer(opts);
         }
 
-        webrtc::DesktopCapturer::SourceList sources;
-        desktop_capturer_->GetSourceList(&sources);
-        std::cout << "capture sources: " << std::endl;
-        for (auto &src : sources) {
-            std::cout << src.title << std::endl;
-        }
+        /* webrtc::DesktopCapturer::SourceList sources; */
+        /* desktop_capturer_->GetSourceList(&sources); */
+        /* std::cout << "capture sources: " << std::endl; */
+        /* for (auto &src : sources) { */
+        /*     std::cout << src.title << std::endl; */
+        /* } */
 
         start();
-        std::cout << "desktop_capturer_ created" << std::endl;
     }
 
     virtual ~ScreenCaptureImpl() override{};
@@ -71,6 +75,7 @@ class ScreenCaptureImpl : public rtc::VideoSourceInterface<webrtc::VideoFrame>,
     void capture_thread()
     {
         while (running()) {
+            std::cout << "start capture thread" << std::endl;
             desktop_capturer_->CaptureFrame();
         }
     }
@@ -102,19 +107,27 @@ class ScreenCaptureImpl : public rtc::VideoSourceInterface<webrtc::VideoFrame>,
     void OnCaptureResult(webrtc::DesktopCapturer::Result result,
                          std::unique_ptr<webrtc::DesktopFrame> frame) override
     {
-        std::cout << "OnCaptureResult: " << std::endl;
+        /* std::cout << "OnCaptureResult: " << std::endl; */
         if (result != webrtc::DesktopCapturer::Result::SUCCESS) {
             return;
         }
 
         auto buffer = webrtc::I420Buffer::Create(frame->size().width(),
                                                  frame->size().height());
+
+        libyuv::ConvertToI420(
+            frame->data(), 0, buffer->MutableDataY(), buffer->StrideY(),
+            buffer->MutableDataU(), buffer->StrideU(), buffer->MutableDataV(),
+            buffer->StrideV(), 0, 0, frame->size().width(),
+            frame->size().height(), buffer->width(), buffer->height(),
+            libyuv::kRotate0, ::libyuv::FOURCC_ARGB);
+
         // DesktopFrame is always BGRA
-        webrtc::ARGBToI420(frame->data(), frame->stride(),
-                           buffer->MutableDataY(), buffer->StrideY(),
-                           buffer->MutableDataU(), buffer->StrideU(),
-                           buffer->MutableDataV(), buffer->StrideV(),
-                           frame->size().width(), frame->size().height());
+        /* libyuv::BGRAToI420(frame->data(), frame->stride(), */
+        /*                    buffer->MutableDataY(), buffer->StrideY(), */
+        /*                    buffer->MutableDataU(), buffer->StrideU(), */
+        /*                    buffer->MutableDataV(), buffer->StrideV(), */
+        /*                    frame->size().width(), frame->size().height()); */
 
         webrtc::VideoFrame::Builder builder;
         auto captured_frame = builder.set_rotation(webrtc::kVideoRotation_0)
@@ -154,7 +167,7 @@ rtc::scoped_refptr<ScreenCapturer> ScreenCapturer::Create()
 
 ScreenCapturer::ScreenCapturer()
     : webrtc::VideoTrackSource(false),
-      source_(std::make_unique<ScreenCaptureImpl>())
+      source_(std::make_unique<ScreenCaptureImpl>(ScreenCaptureImpl::kScreen))
 {
     std::cout << "ScreenCapturer created" << std::endl;
 }

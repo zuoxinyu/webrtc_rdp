@@ -92,6 +92,8 @@ void PeerConnectionImpl::addTracks()
         // TODO: log
         std::cerr << "failed to add video track" << std::endl;
     }
+    /* webrtc::PeerConnectionInterface::RTCOfferAnswerOptions options; */
+    /* pc_->CreateOffer(this, options); */
 }
 
 void PeerConnectionImpl::addSinks(
@@ -117,7 +119,9 @@ void PeerConnectionImpl::OnDataChannel(
 
 void PeerConnectionImpl::OnSuccess(webrtc::SessionDescriptionInterface *desc)
 {
-    std::cout << "Session descriptor: \n" << desc << std::endl;
+    std::string s;
+    desc->ToString(&s);
+    std::cout << "Session descriptor: \n" << s << std::endl;
 }
 
 void PeerConnectionImpl::OnFailure(webrtc::RTCError error)

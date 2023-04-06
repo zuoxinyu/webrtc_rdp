@@ -15,10 +15,10 @@ class MainWindow
     MainWindow(mu_Context *ctx_);
     ~MainWindow() {}
 
-    void Run();
+    void run();
 
   private:
-    void render(mu_Context *ctx);
+    void render_windows(mu_Context *ctx);
     void peers_window(mu_Context *ctx);
     void login_window(mu_Context *ctx);
 

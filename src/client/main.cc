@@ -6,9 +6,9 @@
 #include <string>
 
 extern "C" {
+#include "microui.h"
 #include "renderer.h"
 #include <SDL2/SDL.h>
-#include <microui.h>
 }
 
 #include "main_window.hh"
@@ -41,5 +41,5 @@ int main(int argc, char *argv[])
 
     std::cout << "hello chatz!\n";
     MainWindow wnd(ctx);
-    wnd.Run();
+    wnd.run();
 }

@@ -1,9 +1,12 @@
 #include "video_renderer.hh"
 
-#include <SDL2/SDL_opengl.h>
-#include <SDL2/SDL_video.h>
+#include <SDL2/SDL_render.h>
+#include <cstdio>
 #include <iostream>
 #include <stdexcept>
+
+#include <SDL2/SDL_opengl.h>
+#include <SDL2/SDL_video.h>
 
 static const std::string vs_src = R"(
     #version 330 core
@@ -52,11 +55,24 @@ static const float tex_buffer[] = {
     1.0, 1.0, // rb
 };
 
+constexpr int kWidth = 1920;
+constexpr int kHeight = 1080;
+
+VideoRenderer::VideoRenderer()
+{
+    window_ = SDL_CreateWindow("video window", kWidth / 2, kHeight / 2,
+                               kWidth / 2, kHeight / 2, SDL_WINDOW_OPENGL);
+    SDL_GetWindowSize(window_, &width_, &height_);
+    renderer_ = SDL_CreateRenderer(window_, -1, SDL_RENDERER_ACCELERATED);
+    texture_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_IYUV,
+                                 SDL_TEXTUREACCESS_STREAMING, kWidth, kHeight);
+}
+
 VideoRenderer::VideoRenderer(SDL_Window *win) : window_(win)
 {
-    window_ = SDL_CreateWindow("video window", SDL_WINDOWPOS_UNDEFINED,
-                               SDL_WINDOWPOS_UNDEFINED, 2560, 1440,
-                               SDL_WINDOW_OPENGL);
+    window_ = SDL_CreateWindow("video window", kWidth / 2, kHeight / 2,
+                               kWidth / 2, kHeight / 2, SDL_WINDOW_OPENGL);
+
     glctx_ = SDL_GL_CreateContext(window_);
 
     if (glewInit() != GLEW_OK) {
@@ -65,15 +81,13 @@ VideoRenderer::VideoRenderer(SDL_Window *win) : window_(win)
 
     SDL_GetWindowSize(window_, &width_, &height_);
 
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glDisable(GL_CULL_FACE);
-    glDisable(GL_DEPTH_TEST);
-    glEnable(GL_SCISSOR_TEST);
-    glEnable(GL_TEXTURE_2D);
-    glEnableClientState(GL_VERTEX_ARRAY);
-    glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-    glEnableClientState(GL_COLOR_ARRAY);
+    glViewport(0, 0, width_, height_);
+    /* glClearColor(0, 0.2, 0.2, 1); */
+    /* glClearDepth(1.0); */
+    /* glClear(GL_COLOR_BUFFER_BIT); */
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LEQUAL);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 
     program_ = create_program(vs_src, fs_src);
     glUseProgram(program_);
@@ -86,9 +100,12 @@ VideoRenderer::VideoRenderer(SDL_Window *win) : window_(win)
     tex_buffer_ =
         create_buffer(tex, &tex_buffer[0], sizeof(tex_buffer) / sizeof(float));
 
-    texture_[Y] = create_texture();
-    texture_[U] = create_texture();
-    texture_[V] = create_texture();
+    textures_[Y] = create_texture();
+    textures_[U] = create_texture();
+    textures_[V] = create_texture();
+
+    /* glDrawArrays(GL_TRIANGLE_STRIP, 0, 4); */
+    /* SDL_GL_SwapWindow(window_); */
 }
 
 VideoRenderer::~VideoRenderer()
@@ -98,9 +115,25 @@ VideoRenderer::~VideoRenderer()
     glDeleteBuffers(1, &pos_buffer_);
     glDeleteBuffers(1, &tex_buffer_);
 
-    glDeleteTextures(1, &texture_[V]);
-    glDeleteTextures(1, &texture_[U]);
-    glDeleteTextures(1, &texture_[Y]);
+    glDeleteTextures(1, &textures_[V]);
+    glDeleteTextures(1, &textures_[U]);
+    glDeleteTextures(1, &textures_[Y]);
+}
+
+void VideoRenderer::update_frame()
+{
+    rtc::scoped_refptr<webrtc::VideoFrameBuffer> frame = nullptr;
+    frame_queue_.nonblocking_pull(frame);
+    if (frame) {
+        auto yuv = frame->GetI420();
+        if (yuv) {
+
+            if (glctx_)
+                update_gl_textures(yuv->DataY(), yuv->DataU(), yuv->DataV());
+            else
+                update_sdl_textures(yuv->DataY(), yuv->DataU(), yuv->DataV());
+        }
+    }
 }
 
 GLuint VideoRenderer::create_texture()
@@ -175,24 +208,37 @@ GLuint VideoRenderer::create_buffer(int location, const float data[], size_t sz)
     return buf;
 }
 
-void VideoRenderer::update_textures(const void *ydata, const void *udata,
-                                    const void *vdata)
+void VideoRenderer::update_sdl_textures(const void *ydata, const void *udata,
+                                        const void *vdata)
+{
+    // TODO: use SDL_LockTexture instead?
+    SDL_UpdateYUVTexture(texture_, nullptr, //
+                         static_cast<const uint8_t *>(ydata), kWidth,
+                         static_cast<const uint8_t *>(udata), kWidth / 2,
+                         static_cast<const uint8_t *>(vdata), kWidth / 2);
+    SDL_RenderCopy(renderer_, texture_, nullptr, nullptr);
+    SDL_RenderPresent(renderer_);
+    SDL_RenderFlush(renderer_);
+}
+
+void VideoRenderer::update_gl_textures(const void *ydata, const void *udata,
+                                       const void *vdata)
 {
     SDL_GL_MakeCurrent(window_, glctx_);
 
-    glBindTexture(GL_TEXTURE_2D, texture_[Y]);
+    glBindTexture(GL_TEXTURE_2D, textures_[Y]);
     glActiveTexture(GL_TEXTURE0 + Y);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE, width_, height_, 0,
                  GL_LUMINANCE, GL_UNSIGNED_BYTE, ydata);
     glUniform1i(glGetUniformLocation(program_, "uTexY"), Y);
 
-    glBindTexture(GL_TEXTURE_2D, texture_[U]);
+    glBindTexture(GL_TEXTURE_2D, textures_[U]);
     glActiveTexture(GL_TEXTURE0 + U);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE, width_ / 2, height_ / 2, 0,
                  GL_LUMINANCE, GL_UNSIGNED_BYTE, udata);
     glUniform1i(glGetUniformLocation(program_, "uTexU"), U);
 
-    glBindTexture(GL_TEXTURE_2D, texture_[V]);
+    glBindTexture(GL_TEXTURE_2D, textures_[V]);
     glActiveTexture(GL_TEXTURE0 + V);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE, width_ / 2, height_ / 2, 0,
                  GL_LUMINANCE, GL_UNSIGNED_BYTE, vdata);
@@ -203,21 +249,39 @@ void VideoRenderer::update_textures(const void *ydata, const void *udata,
     SDL_GL_SwapWindow(window_);
 }
 
-// running on capture thread?
+// running on capture thread
 void VideoRenderer::OnFrame(const webrtc::VideoFrame &frame)
 {
     auto yuv = frame.video_frame_buffer()->GetI420();
-    // clang-format off
-    std::cout << "get frame: ["
-              << " id="          << frame.id()
-              << " size="        << frame.size()
-              << " width="       << frame.width()
-              << " height="      << frame.height()
-              << " timestamp="   << frame.timestamp()
-              << " ntp time="    << frame.ntp_time_ms()
-              << " render time=" << frame.render_time_ms()
-              << "]" << std::endl;
-    // clang-format on
+    static int once = 0;
+    if (once < 1200 && once % 60 == 0) {
+        char name[20] = {0};
+        sprintf(name, "frame-%02d.yuv", once / 60);
+        ::FILE *f = ::fopen(name, "wb+");
+        fwrite(yuv->DataY(), 1, yuv->StrideY() * yuv->height(), f);
+        fwrite(yuv->DataU(), 1, yuv->StrideU() * yuv->height() / 2, f);
+        fwrite(yuv->DataV(), 1, yuv->StrideV() * yuv->height() / 2, f);
+        fflush(f);
+        fclose(f);
 
-    update_textures(yuv->DataY(), yuv->DataU(), yuv->DataV());
+        // clang-format off
+        std::cout << "get frame: ["
+                  << " id="          << frame.id()
+                  << " size="        << frame.size()
+                  << " width="       << frame.width()
+                  << " height="      << frame.height()
+                  << " timestamp="   << frame.timestamp()
+                  << " ntp time="    << frame.ntp_time_ms()
+                  << " render time=" << frame.render_time_ms()
+                  << "]" << std::endl;
+        // clang-format on
+    }
+    once++;
+
+    update_sdl_textures(yuv->DataY(), yuv->DataU(), yuv->DataV());
+    // frame_queue_.nonblocking_push(frame.video_frame_buffer());
+    /* if (!frame_queue_.push(frame.video_frame_buffer().get())) { */
+    /*     std::cerr << "a frame is discarded due to queue fullfilled" */
+    /*               << std::endl; */
+    /* } */
 }

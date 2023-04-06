@@ -25,21 +25,21 @@ endif()
 
 message(STATUS "libwebrtc: " ${LIBWEBRTC})
 
-#add_definitions(-DBOOST_ASIO_HAS_CO_AWAIT)
 if (WIN32)
     add_definitions(-DWEBRTC_WIN)
+    find_package(boost 1.79 COMPONENTS json url REQUIRED)
+    find_package(SDL2 REQUIRED)
     find_package(sdl2-ttf REQUIRED)
 elseif (UNIX)
     add_definitions(-DWEBRTC_POSIX)
     add_definitions(-DWEBRTC_LINUX)
     add_definitions(-DWEBRTC_USE_X11)
+    find_package(Boost 1.81 COMPONENTS json url REQUIRED)
+    find_package(SDL2 REQUIRED)
     find_package(SDL2_ttf REQUIRED)
 endif()
 
-# find_package(FFMPEG REQUIRED)
-
 # add_subdirectory(libwebrtc)
-
 
 aux_source_directory(src/client DIR_SRCS)
 aux_source_directory(src/server SERVER_DIR_SRCS)

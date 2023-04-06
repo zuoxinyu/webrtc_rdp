@@ -1,15 +1,15 @@
 #include "main_window.hh"
 
 extern "C" {
+#include "microui.h"
 #include "renderer.h"
 #include <SDL2/SDL.h>
-#include <microui.h>
 }
 
 MainWindow::MainWindow(mu_Context *ctx)
     : io_ctx_(), ctx_(ctx), thread_(nullptr),
       client_(std::make_unique<ChatClient>(io_ctx_)),
-      renderer_(std::make_unique<VideoRenderer>(r_get_window())),
+      renderer_(std::make_unique<VideoRenderer>()),
       pc_(rtc::make_ref_counted<PeerConnectionImpl>())
 {
     if (pc_->createPeerConnection()) {
@@ -19,7 +19,7 @@ MainWindow::MainWindow(mu_Context *ctx)
     // thread_ = std::make_unique<std::thread>([this] { io_ctx_.run(); });
 }
 
-void MainWindow::Run()
+void MainWindow::run()
 {
     while (true) {
         if (io_ctx_.stopped()) {
@@ -70,7 +70,7 @@ void MainWindow::Run()
         }
 
         /* process frame */
-        render(ctx_);
+        render_windows(ctx_);
 
         /* render */
         r_clear(mu_color(bg[0], bg[1], bg[2], 255));
@@ -92,10 +92,11 @@ void MainWindow::Run()
             }
         }
         r_present();
+        /* renderer_->update_frame(); */
     }
 }
 
-void MainWindow::render(mu_Context *ctx)
+void MainWindow::render_windows(mu_Context *ctx)
 {
     mu_begin(ctx);
     if (client_->is_signed()) {
