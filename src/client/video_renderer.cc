@@ -60,8 +60,8 @@ constexpr int kHeight = 1080;
 
 VideoRenderer::VideoRenderer()
 {
-    window_ = SDL_CreateWindow("video window", kWidth / 2, kHeight / 2,
-                               kWidth / 2, kHeight / 2, SDL_WINDOW_OPENGL);
+    window_ = SDL_CreateWindow("video window", kWidth, kHeight, kWidth, kHeight,
+                               SDL_WINDOW_OPENGL);
     SDL_GetWindowSize(window_, &width_, &height_);
     renderer_ = SDL_CreateRenderer(window_, -1, SDL_RENDERER_ACCELERATED);
     texture_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_IYUV,
@@ -252,7 +252,9 @@ void VideoRenderer::update_gl_textures(const void *ydata, const void *udata,
 // running on capture thread
 void VideoRenderer::OnFrame(const webrtc::VideoFrame &frame)
 {
-    auto yuv = frame.video_frame_buffer()->GetI420();
+    auto buf = frame.video_frame_buffer();
+    auto scaled = buf->Scale(kWidth, kHeight);
+    auto yuv = scaled->GetI420();
     static int once = 0;
     if (once < 1200 && once % 60 == 0) {
         char name[20] = {0};

@@ -1,10 +1,9 @@
-#include "client/peerconnection.hh"
-
 #include <memory>
 #include <string>
 #include <thread>
 
 #include "chat_client.hh"
+#include "peerconnection.hh"
 #include "video_renderer.hh"
 
 typedef struct mu_Context mu_Context;

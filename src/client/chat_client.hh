@@ -17,14 +17,10 @@ using boost::system::error_code;
 namespace beast = boost::beast;
 namespace http = beast::http;
 
-// the clien entity, run on a dedicated network thread
+// the client entity, should run on a dedicated network thread
 struct ChatClient {
   public:
     explicit ChatClient(io_context &ctx);
-    ChatClient(const ChatClient &) = delete;
-    ChatClient(ChatClient &&) = delete;
-    ChatClient &operator=(const ChatClient &) = delete;
-    ChatClient &operator=(ChatClient &&) = delete;
     ~ChatClient();
 
   public:

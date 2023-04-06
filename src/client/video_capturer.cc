@@ -74,8 +74,8 @@ class ScreenCaptureImpl : public rtc::VideoSourceInterface<webrtc::VideoFrame>,
 
     void capture_thread()
     {
+        std::cout << "start capture thread" << std::endl;
         while (running()) {
-            std::cout << "start capture thread" << std::endl;
             desktop_capturer_->CaptureFrame();
         }
     }

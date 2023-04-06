@@ -12,6 +12,7 @@
 #include "api/video_codecs/builtin_video_decoder_factory.h"
 #include "api/video_codecs/builtin_video_encoder_factory.h"
 #include "rtc_base/thread.h"
+
 #include "video_capturer.hh"
 
 static const std::string kDefaultSTUNServer = "stun:10.10.10.190:3478";
@@ -92,8 +93,8 @@ void PeerConnectionImpl::addTracks()
         // TODO: log
         std::cerr << "failed to add video track" << std::endl;
     }
-    /* webrtc::PeerConnectionInterface::RTCOfferAnswerOptions options; */
-    /* pc_->CreateOffer(this, options); */
+    webrtc::PeerConnectionInterface::RTCOfferAnswerOptions options;
+    pc_->CreateOffer(this, options);
 }
 
 void PeerConnectionImpl::addSinks(
@@ -114,6 +115,19 @@ void PeerConnectionImpl::OnRemoveStream(
     rtc::scoped_refptr<webrtc::MediaStreamInterface> stream){};
 void PeerConnectionImpl::OnDataChannel(
     rtc::scoped_refptr<webrtc::DataChannelInterface> data_channel){};
+
+void PeerConnectionImpl::OnSignalingChange(
+    webrtc::PeerConnectionInterface::SignalingState new_state)
+{
+}
+void PeerConnectionImpl::OnIceCandidate(
+    const webrtc::IceCandidateInterface *candidate)
+{
+}
+void PeerConnectionImpl::OnIceGatheringChange(
+    webrtc::PeerConnectionInterface::IceGatheringState new_state)
+{
+}
 
 // impl CreateSessionDescriptorInterface
 

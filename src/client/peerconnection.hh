@@ -20,12 +20,9 @@ struct PeerConnectionImpl : public webrtc::PeerConnectionObserver,
 
   public: // PeerConnectionObserver impl
     void OnSignalingChange(
-        webrtc::PeerConnectionInterface::SignalingState new_state) override
-    {
-    }
-    void OnIceCandidate(const webrtc::IceCandidateInterface *candidate) override
-    {
-    }
+        webrtc::PeerConnectionInterface::SignalingState new_state) override;
+    void
+    OnIceCandidate(const webrtc::IceCandidateInterface *candidate) override;
     void OnAddTrack(
         rtc::scoped_refptr<webrtc::RtpReceiverInterface> receiver,
         const std::vector<rtc::scoped_refptr<webrtc::MediaStreamInterface>>
@@ -39,9 +36,7 @@ struct PeerConnectionImpl : public webrtc::PeerConnectionObserver,
     void OnDataChannel(
         rtc::scoped_refptr<webrtc::DataChannelInterface> data_channel) override;
     void OnIceGatheringChange(
-        webrtc::PeerConnectionInterface::IceGatheringState new_state) override
-    {
-    }
+        webrtc::PeerConnectionInterface::IceGatheringState new_state) override;
 
   public: // CreateSessionDescriptionObserver impl
     void OnSuccess(webrtc::SessionDescriptionInterface *desc) override;
