@@ -1,6 +1,7 @@
 #include "server/chat_server.hh"
 
 #include <algorithm>
+#include <boost/asio/detached.hpp>
 #include <boost/json/serializer.hpp>
 #include <boost/url/parse.hpp>
 #include <iostream>
@@ -10,7 +11,13 @@
 #include <boost/json.hpp>
 #include <boost/url.hpp>
 
+namespace http = boost::beast::http;
+namespace websocket = boost::beast::websocket;
+namespace asio = boost::asio;
+
 using response = beast::http::response<beast::http::string_body>;
+using asio::detached;
+using asio::use_awaitable;
 
 static std::string jsonErrorMethods = R"(
 {
@@ -62,9 +69,8 @@ asio::awaitable<void> ChatServer::do_listen()
             co_await acceptor_.async_accept(ctx_, asio::use_awaitable));
 
         std::cout << "new connection from ["
-                  << stream.socket().remote_endpoint().address() << "] "
-                  << std::endl;
-        asio::co_spawn(ctx_, do_session(std::move(stream)),
+                  << stream.socket().remote_endpoint() << "] " << std::endl;
+        asio::co_spawn(ctx_, handle_http_session(std::move(stream)),
                        [](const std::exception_ptr &e) {
                            try {
                                std::rethrow_exception(e);
@@ -76,10 +82,8 @@ asio::awaitable<void> ChatServer::do_listen()
     }
 }
 
-asio::awaitable<void> ChatServer::do_session(beast::tcp_stream stream)
+asio::awaitable<void> ChatServer::handle_http_session(beast::tcp_stream stream)
 {
-    using namespace beast;
-    using namespace asio;
     beast::error_code ec;
 
     // This buffer is required to persist across reads
@@ -89,12 +93,20 @@ asio::awaitable<void> ChatServer::do_session(beast::tcp_stream stream)
     for (;;)
         try {
             // Set the timeout.
-            stream.expires_after(std::chrono::seconds(30));
+            stream.expires_never();
 
             // Read a request
             http::request<http::string_body> req;
 
             co_await http::async_read(stream, buffer, req, use_awaitable);
+
+            if (websocket::is_upgrade(req)) {
+                websocket::stream<beast::tcp_stream> ws(
+                    stream.release_socket());
+                asio::co_spawn(ctx_, handle_websocket_session(std::move(ws)),
+                               detached);
+                co_return;
+            }
 
             // Handle the request
             http::message_generator msg = handle_request(std::move(req));
@@ -103,8 +115,7 @@ asio::awaitable<void> ChatServer::do_session(beast::tcp_stream stream)
             bool keep_alive = msg.keep_alive();
 
             // Send the response
-            co_await beast::async_write(stream, std::move(msg),
-                                        net::use_awaitable);
+            co_await beast::async_write(stream, std::move(msg), use_awaitable);
 
             if (!keep_alive) {
                 // This means we should close the connection, usually because
@@ -120,6 +131,12 @@ asio::awaitable<void> ChatServer::do_session(beast::tcp_stream stream)
     stream.socket().shutdown(asio::ip::tcp::socket::shutdown_send, ec);
 
     // At this point the connection is closed gracefully
+}
+
+asio::awaitable<void>
+ChatServer::handle_websocket_session(websocket::stream<beast::tcp_stream> ws)
+{
+    co_return;
 }
 
 beast::http::message_generator
@@ -151,16 +168,17 @@ ChatServer::handle_sign_in(beast::http::request<beast::http::string_body> &&req)
 
     std::cout << "body:" << req.body() << std::endl;
     Peer peer{json::parse(req.body())};
-
     peer.online = true;
     peer.id = id_gen_.next();
-    peers_.insert_or_assign(peer.id, peer);
+    PeerState state{peer, MessageQueue()};
+
+    peers_.insert_or_assign(peer.id, state);
 
     auto resp = response{beast::http::status::ok, req.version()};
     resp.set(beast::http::field::pragma, peer.id);
     resp.set(beast::http::field::content_type, "text/json");
     resp.keep_alive(true);
-    resp.body() = peers_string();
+    resp.body() = json::serialize(peers_json());
     resp.prepare_payload();
 
     return resp;
@@ -182,16 +200,26 @@ beast::http::message_generator
 ChatServer::handle_wait(beast::http::request<beast::http::string_body> &&req)
 {
     auto params = urls::parse_origin_form(req.target())->params();
-    auto id = params.find("peer_id");
-    if (id == params.end()) {
+    auto id_param = params.find("peer_id");
+    if (id_param == params.end()) {
         return response{beast::http::status::bad_request, 11};
+    }
+    std::string id = (*id_param).value;
+    auto &msgq = peers_[id].msg_queue;
+    json::object msg_body;
+    if (!msgq.empty()) {
+        std::string pending_msg = peers_[id].msg_queue.front();
+        peers_[id].msg_queue.pop();
+        msg_body = {{"peers", peers_json()}, {"msg", json::parse(pending_msg)}};
+    } else {
+        msg_body = {{"peers", peers_json()}};
     }
 
     auto resp = response{beast::http::status::ok, 11};
-    resp.set(beast::http::field::pragma, (*id).value);
+    resp.set(beast::http::field::pragma, id);
     resp.set(beast::http::field::content_type, "text/json");
     resp.keep_alive(true);
-    resp.body() = peers_string();
+    resp.body() = json::serialize(msg_body);
     resp.prepare_payload();
 
     return resp;
@@ -200,16 +228,34 @@ ChatServer::handle_wait(beast::http::request<beast::http::string_body> &&req)
 beast::http::message_generator
 ChatServer::handle_send_to(beast::http::request<beast::http::string_body> &&req)
 {
-    Peer peer{json::parse(req.body())};
-    peers_.erase(peer.id);
-    return response{beast::http::status::ok, 11, peer};
+    json::value body = json::parse(req.body());
+    json::object obj = body.get_object();
+    json::string to = obj["to"].get_string();
+    json::object msg = obj["msg"].get_object();
+
+    peers_[std::string(to)].msg_queue.push(json::serialize(msg));
+
+    auto params = urls::parse_origin_form(req.target())->params();
+    auto id_param = params.find("peer_id");
+    if (id_param == params.end()) {
+        return response{beast::http::status::bad_request, 11};
+    }
+    std::string id = (*id_param).value;
+    auto resp = response{beast::http::status::ok, 11};
+    resp.set(beast::http::field::pragma, id);
+    resp.keep_alive(true);
+
+    resp.body() = "ok";
+    resp.prepare_payload();
+
+    return resp;
 }
 
-std::string ChatServer::peers_string() const
+json::array ChatServer::peers_json() const
 {
     json::array peers_json;
     for (auto &it : peers_) {
-        peers_json.push_back(json::value(it.second));
+        peers_json.push_back(json::value(it.second.peer));
     }
-    return json::serialize(peers_json);
+    return peers_json;
 }

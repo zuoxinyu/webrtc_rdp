@@ -6,26 +6,29 @@ extern "C" {
 #include <SDL2/SDL.h>
 }
 
-MainWindow::MainWindow(mu_Context *ctx)
-    : io_ctx_(), ctx_(ctx), thread_(nullptr),
-      client_(std::make_unique<ChatClient>(io_ctx_)),
-      renderer_(std::make_unique<VideoRenderer>()),
-      pc_(rtc::make_ref_counted<PeerConnectionImpl>())
+MainWindow::MainWindow(mu_Context *ctx, const std::string &title)
+    : title_(title), io_ctx_(), ctx_(ctx), thread_(nullptr),
+      cc_(std::make_unique<ChatClient>(io_ctx_, title)),
+      local_renderer_(std::make_unique<VideoRenderer>()),
+      remote_renderer_(std::make_unique<VideoRenderer>()),
+      pc_(rtc::make_ref_counted<PeerClient>())
 {
+    pc_->setSignalingObserver(cc_.get());
+    cc_->setPeerObserver(pc_.get());
     if (pc_->createPeerConnection()) {
-        pc_->addSinks(renderer_.get());
-        pc_->addTracks();
+        pc_->addLocalSinks(local_renderer_.get());
+        pc_->addRemoteSinks(remote_renderer_.get());
+        pc_->createLocalTracks();
     }
-    // thread_ = std::make_unique<std::thread>([this] { io_ctx_.run(); });
 }
 
 void MainWindow::run()
 {
     while (true) {
-        if (io_ctx_.stopped()) {
-            io_ctx_.restart();
-        }
-        io_ctx_.poll();
+        /* if (io_ctx_.stopped()) { */
+        /*     io_ctx_.restart(); */
+        /* } */
+        /* io_ctx_.poll(); */
 
         SDL_Event e;
         while (SDL_PollEvent(&e)) {
@@ -99,7 +102,7 @@ void MainWindow::run()
 void MainWindow::render_windows(mu_Context *ctx)
 {
     mu_begin(ctx);
-    if (client_->is_signed()) {
+    if (cc_->isSigned()) {
         peers_window(ctx);
     } else {
         login_window(ctx);
@@ -112,17 +115,23 @@ void MainWindow::peers_window(mu_Context *ctx)
 {
     if (mu_begin_window(ctx, "Online Peers", mu_rect(0, 40, 300, 200))) {
         if (mu_header_ex(ctx, "Online Peers", MU_OPT_EXPANDED)) {
-            int ws[2] = {-80, -1};
-            mu_layout_row(ctx, 2, ws, 30);
-            for (auto &pair : client_->online_peers()) {
+            int ws[3] = {-80, -40, -1};
+            mu_layout_row(ctx, 3, ws, 30);
+            for (auto &pair : cc_->onlinePeers()) {
                 mu_label(ctx, pair.second.name.c_str());
                 mu_label(ctx, pair.second.id.c_str());
+                std::string btn_id = pair.second.id;
+                if (mu_button(ctx, btn_id.c_str())) {
+                    // start calling
+                    cc_->setCurrentPeer(pair.second.id);
+                    pc_->makeCall();
+                }
             }
         }
         if (mu_header_ex(ctx, "Offline Peers", MU_OPT_EXPANDED)) {
             int ws[2] = {-80, -1};
             mu_layout_row(ctx, 2, ws, 30);
-            for (auto &pair : client_->offline_peers()) {
+            for (auto &pair : cc_->offlinePeers()) {
                 mu_label(ctx, pair.second.name.c_str());
                 mu_label(ctx, pair.second.id.c_str());
             }
@@ -154,10 +163,10 @@ void MainWindow::login_window(mu_Context *ctx)
         }
 
         if (submit) {
-            int port;
-            sscanf(portbuf, "%d", &port);
+            int port = std::atoi(portbuf);
             std::string host{hostbuf};
-            co_spawn(io_ctx_, client_->StartLogin(host, port), detached);
+            co_spawn(io_ctx_, cc_->signin(host, port), detached);
+            thread_ = std::make_unique<std::thread>([this] { io_ctx_.run(); });
         }
 
         mu_end_window(ctx);

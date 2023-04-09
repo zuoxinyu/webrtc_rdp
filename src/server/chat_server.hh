@@ -1,6 +1,7 @@
 #pragma once
 
 #include <map>
+#include <queue>
 #include <string>
 
 #include <boost/asio.hpp>
@@ -26,17 +27,23 @@ using namespace boost;
 
 struct ChatServer {
   public:
-    using Id = Peer::Id;
+    using MessageQueue = std::queue<std::string>;
     class IdGenerator
     {
         mutable int i = 0;
 
       public:
-        Id next() const
+        Peer::Id next() const
         {
             i++;
             return std::to_string(i);
         };
+    };
+
+    struct PeerState {
+        Peer peer;
+        std::queue<std::string> msg_queue;
+        MessageQueue stream;
     };
 
   public:
@@ -48,7 +55,9 @@ struct ChatServer {
     asio::awaitable<void> do_listen();
 
   private:
-    asio::awaitable<void> do_session(beast::tcp_stream);
+    asio::awaitable<void> handle_http_session(beast::tcp_stream);
+    asio::awaitable<void>
+        handle_websocket_session(beast::websocket::stream<beast::tcp_stream>);
     beast::http::message_generator
     handle_request(beast::http::request<beast::http::string_body> &&);
     beast::http::message_generator
@@ -60,7 +69,7 @@ struct ChatServer {
     beast::http::message_generator
     handle_wait(beast::http::request<beast::http::string_body> &&);
 
-    std::string peers_string() const;
+    json::array peers_json() const;
 
   private:
     asio::io_context &ctx_;
@@ -68,5 +77,5 @@ struct ChatServer {
     int port_;
     IdGenerator id_gen_;
 
-    Peer::List peers_;
+    std::map<Peer::Id, PeerState> peers_;
 };

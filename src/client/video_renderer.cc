@@ -1,8 +1,8 @@
 #include "video_renderer.hh"
+#include "logger.hh"
 
 #include <SDL2/SDL_render.h>
 #include <cstdio>
-#include <iostream>
 #include <stdexcept>
 
 #include <SDL2/SDL_opengl.h>
@@ -60,18 +60,21 @@ constexpr int kHeight = 1080;
 
 VideoRenderer::VideoRenderer()
 {
-    window_ = SDL_CreateWindow("video window", kWidth, kHeight, kWidth, kHeight,
+    window_ = SDL_CreateWindow("video window", 0, 100, kWidth, kHeight,
                                SDL_WINDOW_OPENGL);
     SDL_GetWindowSize(window_, &width_, &height_);
     renderer_ = SDL_CreateRenderer(window_, -1, SDL_RENDERER_ACCELERATED);
     texture_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_IYUV,
                                  SDL_TEXTUREACCESS_STREAMING, kWidth, kHeight);
+    SDL_SetRenderDrawColor(renderer_, 0, 128, 128, 255);
+    SDL_RenderClear(renderer_);
+    SDL_RenderPresent(renderer_);
 }
 
 VideoRenderer::VideoRenderer(SDL_Window *win) : window_(win)
 {
-    window_ = SDL_CreateWindow("video window", kWidth / 2, kHeight / 2,
-                               kWidth / 2, kHeight / 2, SDL_WINDOW_OPENGL);
+    window_ = SDL_CreateWindow("video window", kWidth, kHeight, kWidth, kHeight,
+                               SDL_WINDOW_OPENGL);
 
     glctx_ = SDL_GL_CreateContext(window_);
 
@@ -162,7 +165,7 @@ GLuint VideoRenderer::create_shader(uint typ, const std::string &code)
     if (!status) {
         char logbuf[512] = {0};
         glGetShaderInfoLog(shader, 512, nullptr, logbuf);
-        std::cerr << "shader compile failed: " << logbuf << std::endl;
+        logger::error("shader compile failed: {}", logbuf);
         exit(EXIT_FAILURE);
     }
 
@@ -189,7 +192,7 @@ GLuint VideoRenderer::create_program(const std::string &vs,
     if (!status) {
         char logbuf[512] = {0};
         glGetProgramInfoLog(program, 512, nullptr, logbuf);
-        std::cerr << "program link failed: " << logbuf << std::endl;
+        logger::error("program link failed: {}", logbuf);
         exit(EXIT_FAILURE);
     }
 
@@ -266,17 +269,18 @@ void VideoRenderer::OnFrame(const webrtc::VideoFrame &frame)
         fflush(f);
         fclose(f);
 
-        // clang-format off
-        std::cout << "get frame: ["
-                  << " id="          << frame.id()
-                  << " size="        << frame.size()
-                  << " width="       << frame.width()
-                  << " height="      << frame.height()
-                  << " timestamp="   << frame.timestamp()
-                  << " ntp time="    << frame.ntp_time_ms()
-                  << " render time=" << frame.render_time_ms()
-                  << "]" << std::endl;
-        // clang-format on
+        logger::debug("get frame: ["
+                      " id={}"
+                      " size={}"
+                      " width={}"
+                      " height={}"
+                      " timestamp={}"
+                      " ntp time={}"
+                      " render time={}"
+                      " ]",
+                      frame.id(), frame.size(), frame.width(), frame.height(),
+                      frame.timestamp(), frame.ntp_time_ms(),
+                      frame.render_time_ms());
     }
     once++;
 

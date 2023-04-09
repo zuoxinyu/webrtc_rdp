@@ -1,3 +1,6 @@
+#include "logger.hh"
+#include "main_window.hh"
+
 #include <array>
 #include <cstdio>
 #include <cstdlib>
@@ -11,7 +14,7 @@ extern "C" {
 #include <SDL2/SDL.h>
 }
 
-#include "main_window.hh"
+#include <spdlog/spdlog.h>
 
 static int text_width(mu_Font font, const char *text, int len)
 {
@@ -37,9 +40,14 @@ static mu_Context *init()
 
 int main(int argc, char *argv[])
 {
+    std::string title = "my_name";
+    if (argc > 1) {
+        title = argv[1];
+    }
     mu_Context *ctx = init();
 
-    std::cout << "hello chatz!\n";
-    MainWindow wnd(ctx);
+    spdlog::set_level(spdlog::level::debug);
+    logger::info("Hello dezk");
+    MainWindow wnd(ctx, title);
     wnd.run();
 }

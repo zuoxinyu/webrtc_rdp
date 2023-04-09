@@ -1,8 +1,8 @@
 #include "video_capturer.hh"
+#include "logger.hh"
 
 #include <algorithm>
 #include <cstdlib>
-#include <iostream>
 #include <libyuv/convert.h>
 #include <thread>
 #include <vector>
@@ -15,8 +15,8 @@
 
 #include "modules/desktop_capture/desktop_capture_options.h"
 #include "modules/desktop_capture/desktop_capturer.h"
+#include "rtc_base/time_utils.h"
 
-// TODO: impl VideoFrame
 class ScreenCaptureImpl : public rtc::VideoSourceInterface<webrtc::VideoFrame>,
                           public webrtc::DesktopCapturer::Callback
 {
@@ -32,7 +32,7 @@ class ScreenCaptureImpl : public rtc::VideoSourceInterface<webrtc::VideoFrame>,
     {
         auto opts = webrtc::DesktopCaptureOptions::CreateDefault();
         std::string display = std::getenv("DISPLAY");
-        std::cout << "display: " << display << std::endl;
+        logger::debug("display: {}", display);
         auto xdisplay = webrtc::SharedXDisplay::Create(display);
         opts.set_x_display(xdisplay);
 
@@ -44,12 +44,12 @@ class ScreenCaptureImpl : public rtc::VideoSourceInterface<webrtc::VideoFrame>,
                 webrtc::DesktopCapturer::CreateWindowCapturer(opts);
         }
 
-        /* webrtc::DesktopCapturer::SourceList sources; */
-        /* desktop_capturer_->GetSourceList(&sources); */
-        /* std::cout << "capture sources: " << std::endl; */
-        /* for (auto &src : sources) { */
-        /*     std::cout << src.title << std::endl; */
-        /* } */
+        webrtc::DesktopCapturer::SourceList sources;
+        desktop_capturer_->GetSourceList(&sources);
+        logger::debug("capture sources: ");
+        for (auto &src : sources) {
+            logger::debug(src.title);
+        }
 
         start();
     }
@@ -74,7 +74,7 @@ class ScreenCaptureImpl : public rtc::VideoSourceInterface<webrtc::VideoFrame>,
 
     void capture_thread()
     {
-        std::cout << "start capture thread" << std::endl;
+        logger::debug("start capture thread");
         while (running()) {
             desktop_capturer_->CaptureFrame();
         }
@@ -107,7 +107,8 @@ class ScreenCaptureImpl : public rtc::VideoSourceInterface<webrtc::VideoFrame>,
     void OnCaptureResult(webrtc::DesktopCapturer::Result result,
                          std::unique_ptr<webrtc::DesktopFrame> frame) override
     {
-        /* std::cout << "OnCaptureResult: " << std::endl; */
+        static int16_t id = 0;
+        /* logger::debug("OnCaptureResult: "); */
         if (result != webrtc::DesktopCapturer::Result::SUCCESS) {
             return;
         }
@@ -131,7 +132,8 @@ class ScreenCaptureImpl : public rtc::VideoSourceInterface<webrtc::VideoFrame>,
 
         webrtc::VideoFrame::Builder builder;
         auto captured_frame = builder.set_rotation(webrtc::kVideoRotation_0)
-                                  .set_timestamp_ms(frame->capture_time_ms())
+                                  .set_id(id++)
+                                  .set_timestamp_us(rtc::TimeMicros())
                                   .set_video_frame_buffer(buffer)
                                   .build();
 
@@ -169,5 +171,5 @@ ScreenCapturer::ScreenCapturer()
     : webrtc::VideoTrackSource(false),
       source_(std::make_unique<ScreenCaptureImpl>(ScreenCaptureImpl::kScreen))
 {
-    std::cout << "ScreenCapturer created" << std::endl;
+    logger::debug("ScreenCapturer created");
 }

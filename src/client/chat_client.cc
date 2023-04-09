@@ -1,35 +1,45 @@
 #include "chat_client.hh"
+#include "logger.hh"
 
 #include <algorithm>
+#include <boost/asio/bind_executor.hpp>
 #include <chrono>
 #include <exception>
 #include <iostream>
 #include <thread>
+#include <utility>
 
 #include <boost/json.hpp>
 
-namespace json = boost::json;
-
-ChatClient::ChatClient(io_context &ctx)
-    : thread_(nullptr), ctx_(ctx), stream_(ctx_),
-      wait_timer_(ctx_, std::chrono::seconds(30)),
-      server_(ip::make_address_v4("127.0.0.1"), 8888)
+template <bool B, typename T, typename P>
+static std::string to_str(const http::message<B, T, P> &resp)
 {
-    thread_ = std::make_unique<std::thread>(
-        [this] { std::cout << "ChatClient create" << std::endl; });
+    std::stringstream ss;
+    ss << resp;
+    return ss.str();
+}
+
+ChatClient::ChatClient(io_context &ctx, const std::string &name)
+    : thread_(nullptr), ctx_(ctx), strand_(ctx_), stream_(ctx_),
+      wait_stream_(ctx_), wait_timer_(ctx_, std::chrono::seconds(30)),
+      send_timer_(ctx_, std::chrono::seconds(1)),
+      server_(asio::ip::make_address_v4("127.0.0.1"), 8888), name_(name)
+{
 }
 
 ChatClient::~ChatClient()
 {
     stream_.close();
+    wait_stream_.close();
     wait_timer_.cancel();
+    send_timer_.cancel();
 }
 
 // impl UIObserver
-awaitable<void> ChatClient::StartLogin(std::string host, int port)
+awaitable<void> ChatClient::signin(std::string host, int port)
 {
-    std::cout << "Login to: " << host << ":" << port << std::endl;
-    server_ = ip::tcp::endpoint(ip::make_address_v4(host), port);
+    logger::info("Login to {}:{}", host, port);
+    server_ = asio::ip::tcp::endpoint(asio::ip::make_address_v4(host), port);
 
     beast::flat_buffer fb;
     http::response<http::string_body> resp;
@@ -40,77 +50,158 @@ awaitable<void> ChatClient::StartLogin(std::string host, int port)
     req.set(http::field::connection, "keep-alive");
     req.set(http::field::content_type, "text/json");
     req.prepare_payload();
-    std::cout << "request: " << req << std::endl;
+    logger::debug("signin request: \n{}", to_str(req));
 
     try {
         stream_.expires_never();
         co_await stream_.async_connect(server_, use_awaitable);
         co_await http::async_write(stream_, req, use_awaitable);
         co_await http::async_read(stream_, fb, resp, use_awaitable);
-        std::cout << "server response: " << resp << std::endl;
+        logger::debug("server response:\n{}", to_str(resp));
+
+        me_.id = resp["Pragma"];
+        me_.online = true;
 
         set_peers(json::parse(resp.body()));
-
-        co_spawn(ctx_, ListenOnPeerList(), detached);
-    } catch (const std::exception &err) {
-        std::cerr << "login failed: " << err.what() << std::endl;
+    } catch (beast::system_error &se) {
+        if (se.code() == http::error::end_of_stream) {
+            logger::error("login failed: server closed");
+        } else if (se.code() == asio::error::connection_refused) {
+            logger::error("login failed: connectioin refused");
+        } else {
+            logger::error("login failed: {}", se.what());
+        }
+        co_return;
     }
+
+    co_spawn(ctx_, waitMessage(), detached);
+    /* co_spawn(ctx_, handlePendingMessages(), detached); */
 }
 
-awaitable<void> ChatClient::ListenOnPeerList()
+awaitable<void> ChatClient::waitMessage()
 {
-    std::string target = "/wait?peer_id=" + me_.id;
-    http::request<http::string_body> req{http::verb::get, target, 11};
-    req.set(http::field::host, server_.address().to_string());
-    req.set(http::field::connection, "keep-alive");
-    std::cout << "wait request: " << req << std::endl;
-
     try {
-        while (true) {
-            std::cout << "waiting for server status" << std::endl;
+        logger::debug("start wait message thread");
+        wait_stream_.expires_never();
+        co_await wait_stream_.async_connect(server_, use_awaitable);
+        while (isSigned()) {
+            while (!pending_messages_.empty()) {
+                logger::debug("pending messages: {}", pending_messages_.size());
+                auto m = pending_messages_.front();
+                pending_messages_.pop();
+                co_await sendMessage(currentPeer(), m.payload, m.mt);
+            }
+
+            std::string target = "/wait?peer_id=" + me_.id;
+            http::request<http::string_body> req{http::verb::get, target, 11};
+            req.set(http::field::host, server_.address().to_string());
+            req.set(http::field::connection, "keep-alive");
+            /* logger::debug("wait request:\n{}", to_str(req)); */
+
             http::response<http::string_body> resp;
             beast::flat_buffer fb;
-            stream_.expires_never();
-            co_await http::async_write(stream_, req, use_awaitable);
-            co_await http::async_read(stream_, fb, resp, use_awaitable);
 
-            std::cout << "wait response" << resp << std::endl;
-            set_peers(json::parse(resp.body()));
+            co_await http::async_write(wait_stream_, req, use_awaitable);
+            co_await http::async_read(wait_stream_, fb, resp, use_awaitable);
 
-            wait_timer_.expires_from_now(std::chrono::seconds(30));
+            /* logger::debug("wait response:\n{}", to_str(resp)); */
+            json::object body = json::parse(resp.body()).as_object();
+
+            set_peers(body["peers"]);
+
+            if (body["msg"].is_object()) {
+                json::object msg = body["msg"].as_object();
+                std::string peer_id = std::string(msg["from"].as_string());
+                MessageType mt =
+                    MessageTypeFromString(std::string(msg["type"].as_string()));
+                std::string payload(msg["payload"].get_string());
+
+                if (mt == MessageType::kOffer) {
+                    setCurrentPeer(peer_id);
+                }
+                peer_observer_->OnMessage(mt, payload);
+            }
+            wait_timer_.expires_after(std::chrono::seconds(1));
             co_await wait_timer_.async_wait(use_awaitable);
         }
     } catch (const std::exception &e) {
-        std::cout << "wait error: " << e.what() << std::endl;
+        logger::error("wait error: {}", e.what());
     }
 }
 
-awaitable<void> ChatClient::DisconnectFromServer()
+awaitable<void> ChatClient::logout()
 {
     stream_.close();
+    wait_stream_.close();
+    wait_timer_.cancel();
+    send_timer_.cancel();
     me_.online = false;
     co_return;
 }
 
-awaitable<void> ChatClient::ConnectToPeer(int peer_id) { co_return; }
+awaitable<void> ChatClient::sendMessage(Peer::Id peer_id, std::string payload,
+                                        MessageType mt)
+{
+    logger::debug("send to peer [id={}, type={}]", peer_id,
+                  MessageTypeToString(mt));
 
-awaitable<void> ChatClient::DisconnectFromCurrentPeer() { co_return; }
+    std::string target = "/send?peer_id=" + me_.id;
+    http::request<http::string_body> req{http::verb::post, target, 11};
+    req.set(http::field::host, server_.address().to_string());
+    req.set(http::field::connection, "keep-alive");
+    req.set(http::field::content_type, "text/json");
+
+    // clang-formag off
+    json::object msg = {{"to", peer_id},
+                        {"msg",
+                         {
+                             {"from", me_.id},
+                             {"type", MessageTypeToString(mt)},
+                             {"payload", payload},
+                         }}};
+    // clang-formag on
+
+    req.body() = json::serialize(msg);
+    req.prepare_payload();
+
+    logger::debug("send request:\n{}", to_str(req));
+    try {
+        http::response<http::string_body> resp;
+        beast::flat_buffer fb;
+
+        co_await http::async_write(wait_stream_, req, use_awaitable);
+        co_await http::async_read(wait_stream_, fb, resp, use_awaitable);
+        logger::debug("send response:\n{}", to_str(resp));
+    } catch (beast::error_code &ec) {
+        logger::error("send failed: {}", ec.what());
+    }
+}
+
+awaitable<void> ChatClient::handlePendingMessages()
+{
+    logger::debug("start handle pending message thread");
+    while (isSigned()) {
+        while (!pending_messages_.empty()) {
+            logger::debug("pending messages: {}", pending_messages_.size());
+            auto m = pending_messages_.front();
+            pending_messages_.pop();
+            co_await sendMessage(currentPeer(), m.payload, m.mt);
+        }
+        send_timer_.expires_after(std::chrono::seconds(1));
+        co_await send_timer_.async_wait(use_awaitable);
+    }
+    logger::debug("handle pending messages quit");
+}
 
 void ChatClient::set_peers(const json::value &v)
 {
     json::array peers = v.as_array();
-    auto it =
-        std::find_if(peers.cbegin(), peers.cend(),
-                     [this](const json::value &v) { return Peer(v) == me_; });
-
-    me_ = Peer(*it);
-
     std::for_each(peers.begin(), peers.end(), [this](const Peer &v) {
         peers_.insert({v.id, v});
     });
 }
 
-const Peer::List ChatClient::online_peers() const
+const Peer::List ChatClient::onlinePeers() const
 {
     Peer::List online_peers;
     for (auto &p : peers_) {
@@ -121,7 +212,7 @@ const Peer::List ChatClient::online_peers() const
     return online_peers;
 };
 
-const Peer::List ChatClient::offline_peers() const
+const Peer::List ChatClient::offlinePeers() const
 {
     Peer::List offline_peers;
     for (auto &p : peers_) {
@@ -131,3 +222,9 @@ const Peer::List ChatClient::offline_peers() const
     }
     return offline_peers;
 };
+
+// SignalingObserver
+void ChatClient::SendMessage(MessageType mt, const std::string &msg)
+{
+    pending_messages_.push({mt, msg});
+}
