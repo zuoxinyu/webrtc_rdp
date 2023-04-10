@@ -1,6 +1,8 @@
 .cache
+.vs
+.vscode
 compile_commands.json
 build
-libwebrtc/debug
+libwebrtc/debug*
 libwebrtc/release
 third_party

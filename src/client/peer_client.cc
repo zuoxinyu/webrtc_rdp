@@ -18,10 +18,11 @@ static const std::string kDefaultSTUNServer = "stun:stun.xten.com";
 static const std::string kAudioLabel = "audio_label";
 static const std::string kVideoLabel = "video_label";
 static const std::string kStreamId = "stream_id";
+static const std::string kDataChanId = "data_chan";
 
 using SignalingState = webrtc::PeerConnectionInterface::SignalingState;
 
-PeerClient::PeerClient() {}
+PeerClient::PeerClient() = default;
 
 bool PeerClient::createPeerConnection()
 {
@@ -70,7 +71,6 @@ void PeerClient::createLocalTracks()
         pc_factory_->CreateAudioTrack(kAudioLabel, audio_src.get());
     auto result = pc_->AddTrack(audio_track, {kStreamId});
     if (!result.ok()) {
-        // TODO: log
         logger::error("failed to add audio track");
     }
 
@@ -78,21 +78,29 @@ void PeerClient::createLocalTracks()
     auto video_track =
         pc_factory_->CreateVideoTrack(kVideoLabel, video_src.get());
 
-    if (video_sink_) {
-        video_track->AddOrUpdateSink(video_sink_, rtc::VideoSinkWants());
+    if (local_sink_) {
+        video_track->AddOrUpdateSink(local_sink_, rtc::VideoSinkWants());
     }
 
     result = pc_->AddTrack(video_track, {kStreamId});
     if (!result.ok()) {
-        // TODO: log
         logger::error("failed to add video track");
+    }
+
+    webrtc::DataChannelInit config;
+    auto data_chan = pc_->CreateDataChannelOrError(kDataChanId, &config);
+    if (!data_chan.ok()) {
+        logger::error("failed to add data channel");
+    } else {
+        local_chan_ = data_chan.value();
+        local_chan_->RegisterObserver(this);
     }
 }
 
 void PeerClient::addLocalSinks(
     rtc::VideoSinkInterface<webrtc::VideoFrame> *sink)
 {
-    video_sink_ = sink;
+    local_sink_ = sink;
 }
 
 void PeerClient::addRemoteSinks(
@@ -101,7 +109,7 @@ void PeerClient::addRemoteSinks(
     remote_sink_ = sink;
 }
 
-void PeerClient::OnMessage(MessageType mt, const std::string &payload)
+void PeerClient::OnSignal(MessageType mt, const std::string &payload)
 {
     switch (mt) {
     case MessageType::kUnknown:
@@ -124,39 +132,22 @@ void PeerClient::OnMessage(MessageType mt, const std::string &payload)
     }
 }
 
-// start a call, steps:
-// makeCall
-// CreateOffer
-// -> SetLocalDescription
-// -> send offer
-// wait for answer
-// onMessage(answer)
-// SetRemoteDescription
-// done
 void PeerClient::makeCall()
 {
+    // pc_->RestartIce();
     logger::debug("start calling");
     is_caller_ = true;
     assert(pc_->signaling_state() ==
            webrtc::PeerConnectionInterface::SignalingState::kStable);
     webrtc::PeerConnectionInterface::RTCOfferAnswerOptions opts;
-    pc_->CreateOffer(this, opts);
+    pc_->SetLocalDescription(SetLocalSDPCallback::Create(this));
 }
 
-// recieve a call, steps:
-// onMessage(offer)
-// onRemoteOffer
-// SetRemoteDescription
-// -> CreateAnswer
-// -> SetLocalDescription
-// -> send answer
-// done
 void PeerClient::onRemoteOffer(const std::string &sdp)
 {
     logger::debug("got remote offer:\n{}", sdp);
     assert(pc_->signaling_state() ==
            webrtc::PeerConnectionInterface::SignalingState::kStable);
-
     webrtc::SdpParseError err;
     auto offer =
         webrtc::CreateSessionDescription(webrtc::SdpType::kOffer, sdp, &err);
@@ -183,7 +174,7 @@ void PeerClient::onRemoteCandidate(const std::string &sdp)
     candi.reset(webrtc::CreateIceCandidate("", 0, sdp, &err));
 
     if (!candi) {
-        logger::error("failed parse add candidate: {}", err.description);
+        logger::error("failed parse remote candidate: {}", err.description);
         return;
     }
 
@@ -198,21 +189,7 @@ void PeerClient::onRemoteCandidate(const std::string &sdp)
 
 void PeerClient::OnSuccess(webrtc::SessionDescriptionInterface *desc)
 {
-    std::string sdp;
-    desc->ToString(&sdp);
-
-    if (is_caller_) {
-        offer_ = sdp;
-    } else {
-        answer_ = sdp;
-    }
-
-    logger::debug("create local offer/answer: {}", sdp);
-
-    // desc is the only owner, should be safe
-    auto pdesc = std::unique_ptr<webrtc::SessionDescriptionInterface>(desc);
-    pc_->SetLocalDescription(std::move(pdesc),
-                             SetLocalSDPCallback::Create(this));
+    logger::debug("create local offer/answer: {}", desc->type());
 }
 
 void PeerClient::OnFailure(webrtc::RTCError error)
@@ -223,27 +200,20 @@ void PeerClient::OnFailure(webrtc::RTCError error)
 void PeerClient::SetRemoteSDPCallback::OnSetRemoteDescriptionComplete(
     webrtc::RTCError error)
 {
-    if (that_->is_caller_) { // remote answer set done
-        /* assert(that_->pc_->signaling_state() ==
-         * SignalingState::kHaveRemotePrAnswer); */
-    } else { // remote offer set done
-        assert(that_->pc_->signaling_state() ==
-               SignalingState::kHaveRemoteOffer);
-        webrtc::PeerConnectionInterface::RTCOfferAnswerOptions opts;
-        that_->pc_->CreateAnswer(that_, opts);
+    if (!that_->isCaller()) {
+        that_->pc_->SetLocalDescription(SetLocalSDPCallback::Create(that_));
     }
 }
 
 void PeerClient::SetLocalSDPCallback::OnSetLocalDescriptionComplete(
     webrtc::RTCError error)
 {
-    if (that_->is_caller_) { // CreateOffer callback
-        that_->signaling_observer_->SendMessage(MessageType::kOffer,
-                                                that_->offer_);
-    } else { // CreateAnswer callback
-        that_->signaling_observer_->SendMessage(MessageType::kAnswer,
-                                                that_->answer_);
-    }
+    std::string sdp;
+    auto desc = that_->pc_->local_description();
+    desc->ToString(&sdp);
+
+    auto mt = that_->isCaller() ? MessageType::kOffer : MessageType::kAnswer;
+    that_->signaling_observer_->SendSignal(mt, sdp);
 }
 
 // PeerConnectionObserver impl
@@ -289,24 +259,40 @@ void PeerClient::OnRemoveTrack(
 };
 
 void PeerClient::OnDataChannel(
-    rtc::scoped_refptr<webrtc::DataChannelInterface> data_channel){};
+    rtc::scoped_refptr<webrtc::DataChannelInterface> data_channel)
+{
+    logger::info("new remote channel [id={} proto={}] connected",
+                 data_channel->id(), data_channel->protocol());
+    remote_chan_ = data_channel;
+};
 
 void PeerClient::OnIceCandidate(const webrtc::IceCandidateInterface *candidate)
 {
     if (!candidate) {
-        logger::error("OnIceCandidate error, candidate is null");
+        logger::info("OnIceCandidate got null candidate");
         return;
     }
     std::string candi;
     candidate->ToString(&candi);
-    candi_ = candi;
 
     logger::debug("got local candidate:\n{}", candi);
 
-    signaling_observer_->SendMessage(MessageType::kCandidate, candi);
+    signaling_observer_->SendSignal(MessageType::kCandidate, candi);
 }
 
 void PeerClient::OnIceGatheringChange(
     webrtc::PeerConnectionInterface::IceGatheringState new_state)
 {
+}
+
+// DataChannelInterface impl
+void PeerClient::OnMessage(const webrtc::DataBuffer &msg)
+{
+    if (!msg.binary) {
+        std::string m(reinterpret_cast<const char *>(msg.data.data()),
+                      msg.size());
+        logger::info("recv remote text message: {}", m);
+    } else {
+        logger::info("recv remote binary message: {}", msg.size());
+    }
 }

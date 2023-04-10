@@ -48,11 +48,11 @@ static inline std::string MessageTypeToString(MessageType v)
 }
 
 struct SignalingObserver {
-    virtual void SendMessage(MessageType, const std::string &) = 0;
+    virtual void SendSignal(MessageType, const std::string &) = 0;
 };
 
 struct PeerObserver {
-    virtual void OnMessage(MessageType, const std::string &) = 0;
+    virtual void OnSignal(MessageType, const std::string &) = 0;
 };
 
 #endif // CALLBACKS_HH_

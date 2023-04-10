@@ -162,7 +162,7 @@ class ScreenCaptureImpl : public rtc::VideoSourceInterface<webrtc::VideoFrame>,
     bool running_ = false;
 };
 
-rtc::scoped_refptr<ScreenCapturer> ScreenCapturer::Create()
+rtc::scoped_refptr<webrtc::VideoTrackSource> ScreenCapturer::Create()
 {
     return rtc::make_ref_counted<ScreenCapturer>();
 }

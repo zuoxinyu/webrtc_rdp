@@ -7,11 +7,11 @@ extern "C" {
 }
 
 MainWindow::MainWindow(mu_Context *ctx, const std::string &title)
-    : title_(title), io_ctx_(), ctx_(ctx), thread_(nullptr),
-      cc_(std::make_unique<ChatClient>(io_ctx_, title)),
+    : title_(title), io_ctx_(), ctx_(ctx),
+      cc_(std::make_unique<SignalClient>(io_ctx_, title)),
+      pc_(rtc::make_ref_counted<PeerClient>()),
       local_renderer_(std::make_unique<VideoRenderer>()),
-      remote_renderer_(std::make_unique<VideoRenderer>()),
-      pc_(rtc::make_ref_counted<PeerClient>())
+      remote_renderer_(std::make_unique<VideoRenderer>())
 {
     pc_->setSignalingObserver(cc_.get());
     cc_->setPeerObserver(pc_.get());
@@ -25,16 +25,23 @@ MainWindow::MainWindow(mu_Context *ctx, const std::string &title)
 void MainWindow::run()
 {
     while (true) {
-        /* if (io_ctx_.stopped()) { */
-        /*     io_ctx_.restart(); */
-        /* } */
-        /* io_ctx_.poll(); */
+        if (io_ctx_.stopped()) {
+            io_ctx_.restart();
+        }
+        io_ctx_.poll();
 
         SDL_Event e;
         while (SDL_PollEvent(&e)) {
             switch (e.type) {
             case SDL_QUIT:
                 std::exit(EXIT_SUCCESS);
+                break;
+            case SDL_WINDOWEVENT:
+                switch (e.window.type) {
+                case SDL_WINDOWEVENT_CLOSE:
+                    SDL_DestroyWindow(SDL_GetWindowFromID(e.window.windowID));
+                    break;
+                }
                 break;
             case SDL_MOUSEMOTION:
                 mu_input_mousemove(ctx_, e.motion.x, e.motion.y);
@@ -77,7 +84,7 @@ void MainWindow::run()
 
         /* render */
         r_clear(mu_color(bg[0], bg[1], bg[2], 255));
-        mu_Command *cmd = NULL;
+        mu_Command *cmd = nullptr;
         while (mu_next_command(ctx_, &cmd)) {
             switch (cmd->type) {
             case MU_COMMAND_TEXT:
@@ -102,7 +109,7 @@ void MainWindow::run()
 void MainWindow::render_windows(mu_Context *ctx)
 {
     mu_begin(ctx);
-    if (cc_->isSigned()) {
+    if (cc_->online()) {
         peers_window(ctx);
     } else {
         login_window(ctx);
@@ -117,7 +124,7 @@ void MainWindow::peers_window(mu_Context *ctx)
         if (mu_header_ex(ctx, "Online Peers", MU_OPT_EXPANDED)) {
             int ws[3] = {-80, -40, -1};
             mu_layout_row(ctx, 3, ws, 30);
-            for (auto &pair : cc_->onlinePeers()) {
+            for (auto &pair : cc_->peers()) {
                 mu_label(ctx, pair.second.name.c_str());
                 mu_label(ctx, pair.second.id.c_str());
                 std::string btn_id = pair.second.id;
@@ -166,7 +173,6 @@ void MainWindow::login_window(mu_Context *ctx)
             int port = std::atoi(portbuf);
             std::string host{hostbuf};
             co_spawn(io_ctx_, cc_->signin(host, port), detached);
-            thread_ = std::make_unique<std::thread>([this] { io_ctx_.run(); });
         }
 
         mu_end_window(ctx);

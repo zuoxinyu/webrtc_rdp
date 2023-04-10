@@ -205,7 +205,7 @@ GLuint VideoRenderer::create_buffer(int location, const float data[], size_t sz)
     glGenBuffers(1, &buf);
     glBindBuffer(GL_ARRAY_BUFFER, buf);
     glBufferData(GL_ARRAY_BUFFER, sz, data, GL_DYNAMIC_DRAW);
-    glVertexAttribPointer(location, 2, GL_FLOAT, false, 8, 0);
+    glVertexAttribPointer(location, 2, GL_FLOAT, false, 8, nullptr);
     glEnableVertexAttribArray(location);
 
     return buf;
@@ -222,6 +222,34 @@ void VideoRenderer::update_sdl_textures(const void *ydata, const void *udata,
     SDL_RenderCopy(renderer_, texture_, nullptr, nullptr);
     SDL_RenderPresent(renderer_);
     SDL_RenderFlush(renderer_);
+}
+
+void VideoRenderer::dump_frame(const webrtc::VideoFrame &frame, int id)
+{
+    auto buf = frame.video_frame_buffer();
+    auto scaled = buf->Scale(kWidth, kHeight);
+    auto yuv = scaled->GetI420();
+    char name[20] = {0};
+    sprintf(name, "frame-%02d.yuv", id);
+    ::FILE *f = ::fopen(name, "wb+");
+    fwrite(yuv->DataY(), 1, yuv->StrideY() * yuv->height(), f);
+    fwrite(yuv->DataU(), 1, yuv->StrideU() * yuv->height() / 2, f);
+    fwrite(yuv->DataV(), 1, yuv->StrideV() * yuv->height() / 2, f);
+    fflush(f);
+    fclose(f);
+
+    logger::debug("get frame: ["
+                  " id={}"
+                  " size={}"
+                  " width={}"
+                  " height={}"
+                  " timestamp={}"
+                  " ntp time={}"
+                  " render time={}"
+                  " ]",
+                  frame.id(), frame.size(), frame.width(), frame.height(),
+                  frame.timestamp(), frame.ntp_time_ms(),
+                  frame.render_time_ms());
 }
 
 void VideoRenderer::update_gl_textures(const void *ydata, const void *udata,
@@ -260,34 +288,9 @@ void VideoRenderer::OnFrame(const webrtc::VideoFrame &frame)
     auto yuv = scaled->GetI420();
     static int once = 0;
     if (once < 1200 && once % 60 == 0) {
-        char name[20] = {0};
-        sprintf(name, "frame-%02d.yuv", once / 60);
-        ::FILE *f = ::fopen(name, "wb+");
-        fwrite(yuv->DataY(), 1, yuv->StrideY() * yuv->height(), f);
-        fwrite(yuv->DataU(), 1, yuv->StrideU() * yuv->height() / 2, f);
-        fwrite(yuv->DataV(), 1, yuv->StrideV() * yuv->height() / 2, f);
-        fflush(f);
-        fclose(f);
-
-        logger::debug("get frame: ["
-                      " id={}"
-                      " size={}"
-                      " width={}"
-                      " height={}"
-                      " timestamp={}"
-                      " ntp time={}"
-                      " render time={}"
-                      " ]",
-                      frame.id(), frame.size(), frame.width(), frame.height(),
-                      frame.timestamp(), frame.ntp_time_ms(),
-                      frame.render_time_ms());
+        dump_frame(frame, once);
     }
     once++;
 
     update_sdl_textures(yuv->DataY(), yuv->DataU(), yuv->DataV());
-    // frame_queue_.nonblocking_push(frame.video_frame_buffer());
-    /* if (!frame_queue_.push(frame.video_frame_buffer().get())) { */
-    /*     std::cerr << "a frame is discarded due to queue fullfilled" */
-    /*               << std::endl; */
-    /* } */
 }

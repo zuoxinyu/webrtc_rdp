@@ -1,4 +1,5 @@
 #pragma once
+#include "peer.hh"
 
 #include <map>
 #include <queue>
@@ -7,27 +8,23 @@
 #include <boost/asio.hpp>
 #include <boost/beast.hpp>
 
-#include "peer.hh"
+namespace http = boost::beast::http;
+namespace websocket = boost::beast::websocket;
+namespace asio = boost::asio;
 
-/**
- * PROTOCOL:
- * sign_in:
- *   POST /sign_in
- *   {name, id}
- * sign_out:
- *   POST /sign_out?id=$id
- * send_to:
- *   POST /send
- *   {to, msg}
- * wait:
- *   GET /wait?<id>
- */
-
-using namespace boost;
+using wstream = websocket::stream<beast::tcp_stream>;
+using response = beast::http::response<beast::http::string_body>;
+using request = beast::http::request<beast::http::string_body>;
+using asio::detached;
+using asio::use_awaitable;
 
 struct ChatServer {
   public:
+    struct PeerState;
+    using PeerState = struct PeerState;
     using MessageQueue = std::queue<std::string>;
+    using PeerMap = std::map<Peer::Id, PeerState>;
+
     class IdGenerator
     {
         mutable int i = 0;
@@ -42,8 +39,9 @@ struct ChatServer {
 
     struct PeerState {
         Peer peer;
-        std::queue<std::string> msg_queue;
-        MessageQueue stream;
+        MessageQueue msg_queue;
+        std::shared_ptr<beast::tcp_stream> stream;
+        std::shared_ptr<wstream> wstream;
     };
 
   public:
@@ -52,30 +50,25 @@ struct ChatServer {
     ~ChatServer();
 
   public:
-    asio::awaitable<void> do_listen();
+    asio::awaitable<void> run();
 
   private:
-    asio::awaitable<void> handle_http_session(beast::tcp_stream);
-    asio::awaitable<void>
-        handle_websocket_session(beast::websocket::stream<beast::tcp_stream>);
-    beast::http::message_generator
-    handle_request(beast::http::request<beast::http::string_body> &&);
-    beast::http::message_generator
-    handle_sign_in(beast::http::request<beast::http::string_body> &&);
-    beast::http::message_generator
-    handle_sign_out(beast::http::request<beast::http::string_body> &&);
-    beast::http::message_generator
-    handle_send_to(beast::http::request<beast::http::string_body> &&);
-    beast::http::message_generator
-    handle_wait(beast::http::request<beast::http::string_body> &&);
+    auto handle_http_session(std::shared_ptr<beast::tcp_stream>)
+        -> asio::awaitable<void>;
+    auto handle_websocket_session(std::shared_ptr<wstream>, request)
+        -> asio::awaitable<void>;
+    auto handle_request(request &&) -> http::message_generator;
+    auto handle_sign_in(request &&) -> http::message_generator;
+    auto handle_sign_out(request &&) -> http::message_generator;
+    auto handle_send_to(request &&) -> http::message_generator;
+    auto handle_wait(request &&) -> http::message_generator;
 
-    json::array peers_json() const;
+    auto peers_json() const -> json::array;
 
   private:
     asio::io_context &ctx_;
     asio::ip::tcp::acceptor acceptor_;
     int port_;
     IdGenerator id_gen_;
-
-    std::map<Peer::Id, PeerState> peers_;
+    PeerMap peers_;
 };

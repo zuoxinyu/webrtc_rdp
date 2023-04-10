@@ -21,8 +21,8 @@ Index:
 Diagnostics:
   # Tweak Clang-Tidy checks.
   ClangTidy:
-    Add: [performance*, ] #modernize*, ]
-    Remove: [modernize-use-trailing-return-type, modernize-deprecated-headers, modernize-avoid-c-arrays, readability-*]
+    Add: [performance*, modernize*, ]
+    Remove: [ modernize-use-nodiscard, modernize-deprecated-headers, modernize-avoid-c-arrays, readability-*]
     CheckOptions:
       readability-identifier-naming.VariableCase: CamelCase
 

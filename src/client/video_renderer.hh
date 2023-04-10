@@ -14,7 +14,7 @@ struct VideoRenderer : public rtc::VideoSinkInterface<webrtc::VideoFrame> {
   public:
     explicit VideoRenderer(SDL_Window *);
     explicit VideoRenderer();
-    ~VideoRenderer();
+    ~VideoRenderer() override;
     void update_frame();
 
   private:
@@ -27,11 +27,13 @@ struct VideoRenderer : public rtc::VideoSinkInterface<webrtc::VideoFrame> {
                             const void *vdata);
     void update_sdl_textures(const void *ydata, const void *udata,
                              const void *vdata);
+    void dump_frame(const webrtc::VideoFrame &frame, int id = 0);
 
   public:
     void OnFrame(const webrtc::VideoFrame &frame) override;
 
   private:
+    // resources
     SDL_Window *window_ = nullptr;
     SDL_GLContext glctx_ = nullptr;
     SDL_Renderer *renderer_ = nullptr;
@@ -40,12 +42,11 @@ struct VideoRenderer : public rtc::VideoSinkInterface<webrtc::VideoFrame> {
     GLuint program_ = 0;
     GLuint tex_buffer_ = 0;
     GLuint pos_buffer_ = 0;
+    // properties
     int width_ = 0;
     int height_ = 0;
+    // states
 
     boost::sync_queue<rtc::scoped_refptr<webrtc::VideoFrameBuffer>>
         frame_queue_;
-    /* boost::lockfree::queue<webrtc::VideoFrameBuffer *, */
-    /*                        boost::lockfree::capacity<16>> */
-    /*     frame_queue_; */
 };

@@ -17,7 +17,7 @@ int main(int argc, char *argv[])
     }
 
     ChatServer server(ioc, host, port);
-    boost::asio::co_spawn(ioc, server.do_listen(), boost::asio::detached);
+    boost::asio::co_spawn(ioc, server.run(), boost::asio::detached);
 
     ioc.run();
 }
