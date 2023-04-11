@@ -38,6 +38,10 @@ static mu_Context *init()
     return ctx;
 }
 
+#ifdef WIN32
+#undef SDL_main
+#endif
+
 int main(int argc, char *argv[])
 {
     std::string title = "my_name";
@@ -50,4 +54,5 @@ int main(int argc, char *argv[])
     logger::info("Hello dezk");
     MainWindow wnd(ctx, title);
     wnd.run();
+    return 0;
 }

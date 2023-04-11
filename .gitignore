@@ -6,3 +6,4 @@ build
 libwebrtc/debug*
 libwebrtc/release
 third_party
+vcpkg_installed

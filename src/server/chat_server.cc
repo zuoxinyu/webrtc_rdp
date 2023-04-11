@@ -2,12 +2,13 @@
 #include "logger.hh"
 
 #include <algorithm>
-#include <boost/asio/error.hpp>
 #include <chrono>
 #include <iostream>
+#include <utility>
 #include <memory>
 #include <set>
 
+#include <boost/asio/error.hpp>
 #include <boost/asio/detached.hpp>
 #include <boost/asio/use_awaitable.hpp>
 #include <boost/beast/core/buffers_to_string.hpp>
@@ -16,7 +17,6 @@
 #include <boost/json/serializer.hpp>
 #include <boost/url.hpp>
 #include <boost/url/parse.hpp>
-#include <utility>
 
 using namespace std::chrono_literals;
 
@@ -73,7 +73,8 @@ ChatServer::~ChatServer() = default;
 auto ChatServer::run() -> asio::awaitable<void>
 {
 
-    for (;;) {
+    for (;;)
+    {
         auto stream = std::make_unique<beast::tcp_stream>(
             co_await acceptor_.async_accept(ctx_, asio::use_awaitable));
 
@@ -81,11 +82,15 @@ auto ChatServer::run() -> asio::awaitable<void>
                      stream->socket().remote_endpoint().address().to_string(),
                      stream->socket().remote_endpoint().port());
         asio::co_spawn(ctx_, handle_http_session(std::move(stream)),
-                       [](const std::exception_ptr &e) {
-                           try {
+                       [](const std::exception_ptr &e)
+                       {
+                           try
+                           {
                                if (e)
                                    std::rethrow_exception(e);
-                           } catch (const std::exception &err) {
+                           }
+                           catch (const std::exception &err)
+                           {
                                logger::error("Error in session: {}",
                                              err.what());
                            }
@@ -104,8 +109,10 @@ auto ChatServer::handle_http_session(std::shared_ptr<beast::tcp_stream> stream)
     std::string id;
 
     // This lambda is used to send messages
-    for (;;) {
-        try {
+    for (;;)
+    {
+        try
+        {
             // Set the timeout.
             stream->expires_after(30s);
 
@@ -116,7 +123,8 @@ auto ChatServer::handle_http_session(std::shared_ptr<beast::tcp_stream> stream)
 
             id = req[http::field::pragma];
 
-            if (websocket::is_upgrade(req)) {
+            if (websocket::is_upgrade(req))
+            {
                 auto ws = make_unique<wstream>(stream->release_socket());
                 co_await asio::co_spawn(
                     ctx_,
@@ -134,15 +142,21 @@ auto ChatServer::handle_http_session(std::shared_ptr<beast::tcp_stream> stream)
             // Send the response
             co_await beast::async_write(*stream, std::move(msg), use_awaitable);
 
-            if (!keep_alive) {
+            if (!keep_alive)
+            {
                 break;
             }
-        } catch (boost::system::system_error &se) {
+        }
+        catch (boost::system::system_error &se)
+        {
             if (se.code() == asio::error::network_reset ||
                 se.code() == asio::error::connection_reset ||
-                se.code() == http::error::end_of_stream) {
+                se.code() == http::error::end_of_stream)
+            {
                 logger::info("peer[{}], connection closed", id);
-            } else {
+            }
+            else
+            {
                 logger::info("peer[{}], connection closed due to {}", id,
                              se.what());
             }
@@ -150,7 +164,8 @@ auto ChatServer::handle_http_session(std::shared_ptr<beast::tcp_stream> stream)
         }
     }
 
-    if (!id.empty()) {
+    if (!id.empty())
+    {
         peers_.erase(id);
     }
 
@@ -164,9 +179,8 @@ auto ChatServer::handle_websocket_session(std::shared_ptr<wstream> ws,
                                           request req) -> asio::awaitable<void>
 {
     ws->set_option(
-        websocket::stream_base::decorator([](websocket::response_type &resp) {
-            resp.set(http::field::server, "chat-server");
-        }));
+        websocket::stream_base::decorator([](websocket::response_type &resp)
+                                          { resp.set(http::field::server, "chat-server"); }));
     co_await ws->async_accept(req, use_awaitable);
 
     beast::flat_buffer fb;
@@ -179,18 +193,26 @@ auto ChatServer::handle_websocket_session(std::shared_ptr<wstream> ws,
 auto ChatServer::handle_request(request &&req) -> http::message_generator
 {
     logger::debug("request: \n{}", to_str(req));
-    if (supportMethods.find(req.method()) == supportMethods.end()) {
+    if (supportMethods.find(req.method()) == supportMethods.end())
+    {
         return response{http::status::not_implemented, 11, jsonErrorMethods};
     }
     auto url = urls::parse_origin_form(req.target());
 
-    if (url->path() == "/sign_in") {
+    if (url->path() == "/sign_in")
+    {
         return handle_sign_in(std::move(req));
-    } else if (url->path() == "/sign_out") {
+    }
+    else if (url->path() == "/sign_out")
+    {
         return handle_sign_out(std::move(req));
-    } else if (url->path() == "/send") {
+    }
+    else if (url->path() == "/send")
+    {
         return handle_send_to(std::move(req));
-    } else if (url->path() == "/wait") {
+    }
+    else if (url->path() == "/wait")
+    {
         return handle_wait(std::move(req));
     }
 
@@ -234,11 +256,14 @@ auto ChatServer::handle_wait(request &&req) -> http::message_generator
     std::string id = req[http::field::pragma];
     auto &msgq = peers_[id].msg_queue;
     json::object msg_body;
-    if (!msgq.empty()) {
+    if (!msgq.empty())
+    {
         std::string pending_msg = peers_[id].msg_queue.front();
         peers_[id].msg_queue.pop();
         msg_body = {{"peers", peers_json()}, {"msg", json::parse(pending_msg)}};
-    } else {
+    }
+    else
+    {
         msg_body = {{"peers", peers_json()}};
     }
 
@@ -274,7 +299,8 @@ auto ChatServer::handle_send_to(request &&req) -> http::message_generator
 auto ChatServer::peers_json() const -> json::array
 {
     json::array peers_json;
-    for (auto &it : peers_) {
+    for (auto &it : peers_)
+    {
         peers_json.push_back(json::value(it.second.peer));
     }
     return peers_json;

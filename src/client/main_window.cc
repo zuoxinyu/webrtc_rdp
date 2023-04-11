@@ -150,7 +150,8 @@ void MainWindow::peers_window(mu_Context *ctx)
 void MainWindow::login_window(mu_Context *ctx)
 {
     if (mu_begin_window(ctx, "Login", mu_rect(0, 40, 300, 200))) {
-        mu_layout_row(ctx, 2, std::array{-240, -1}.begin(), 25);
+        int ws[2] = { -240, -1 };
+        mu_layout_row(ctx, 2, ws, 25);
         int submit = 0;
         static char hostbuf[16] = "127.0.0.1";
         static char portbuf[8] = "8888";
@@ -159,7 +160,7 @@ void MainWindow::login_window(mu_Context *ctx)
             mu_set_focus(ctx, ctx->last_id);
             submit = 1;
         }
-        mu_layout_row(ctx, 2, std::array{-240, -1}.begin(), 25);
+        mu_layout_row(ctx, 2, ws, 25);
         mu_text(ctx, "Port:");
         if (mu_textbox(ctx, portbuf, sizeof(portbuf)) & MU_RES_SUBMIT) {
             mu_set_focus(ctx, ctx->last_id);

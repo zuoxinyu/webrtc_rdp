@@ -46,5 +46,4 @@ set_source_files_properties(${_OBJ_FILES} PROPERTIES
 
 set_target_properties(webrtc PROPERTIES
     LINKER_LANGUAGE CXX
-    LIBRARY_OUTPUT_DIRECTORY ${WEBRTC_OUTPUT_DIR}
     PREFIX lib)

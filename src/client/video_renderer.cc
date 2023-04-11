@@ -1,10 +1,10 @@
 #include "video_renderer.hh"
 #include "logger.hh"
 
-#include <SDL2/SDL_render.h>
 #include <cstdio>
 #include <stdexcept>
 
+#include <SDL2/SDL_render.h>
 #include <SDL2/SDL_opengl.h>
 #include <SDL2/SDL_video.h>
 
@@ -152,7 +152,7 @@ GLuint VideoRenderer::create_texture()
     return tex;
 }
 
-GLuint VideoRenderer::create_shader(uint typ, const std::string &code)
+GLuint VideoRenderer::create_shader(unsigned typ, const std::string &code)
 {
     const char *src = code.c_str();
     GLuint shader = glCreateShader(typ);
