@@ -1,0 +1,51 @@
+[
+{
+  "directory": "/home/doubleleft/webrtc_app",
+  "arguments": ["/usr/bin/clang", "-c", "-Qunused-arguments", "-m64", "-g", "-O0", "-std=c++20", "-Isrc", "-DSPDLOG_SHARED_LIB", "-DSPDLOG_COMPILED_LIB", "-DSPDLOG_FMT_EXTERNAL", "-o", "build/.objs/signal_server/linux/x86_64/debug/src/server/chat_server.cc.o", "src/server/chat_server.cc"],
+  "file": "src/server/chat_server.cc"
+},
+{
+  "directory": "/home/doubleleft/webrtc_app",
+  "arguments": ["/usr/bin/clang", "-c", "-Qunused-arguments", "-m64", "-g", "-O0", "-std=c++20", "-Isrc", "-DSPDLOG_SHARED_LIB", "-DSPDLOG_COMPILED_LIB", "-DSPDLOG_FMT_EXTERNAL", "-o", "build/.objs/signal_server/linux/x86_64/debug/src/server/main.cc.o", "src/server/main.cc"],
+  "file": "src/server/main.cc"
+},
+{
+  "directory": "/home/doubleleft/webrtc_app",
+  "arguments": ["/usr/bin/clang", "-c", "-Qunused-arguments", "-m64", "-g", "-O0", "-std=c++20", "-Isrc", "-I../libwebrtc_build/src", "-DWEBRTC_POSIX", "-DWEBRTC_LINUX", "-DWEBRTC_USE_X11", "-DSPDLOG_SHARED_LIB", "-DSPDLOG_COMPILED_LIB", "-DSPDLOG_FMT_EXTERNAL", "-Wno-deprecated-declarations", "-o", "build/.objs/dezk/linux/x86_64/debug/src/client/video_renderer.cc.o", "src/client/video_renderer.cc"],
+  "file": "src/client/video_renderer.cc"
+},
+{
+  "directory": "/home/doubleleft/webrtc_app",
+  "arguments": ["/usr/bin/clang", "-c", "-Qunused-arguments", "-m64", "-g", "-O0", "-std=c++20", "-Isrc", "-I../libwebrtc_build/src", "-DWEBRTC_POSIX", "-DWEBRTC_LINUX", "-DWEBRTC_USE_X11", "-DSPDLOG_SHARED_LIB", "-DSPDLOG_COMPILED_LIB", "-DSPDLOG_FMT_EXTERNAL", "-Wno-deprecated-declarations", "-o", "build/.objs/dezk/linux/x86_64/debug/src/client/video_capturer.cc.o", "src/client/video_capturer.cc"],
+  "file": "src/client/video_capturer.cc"
+},
+{
+  "directory": "/home/doubleleft/webrtc_app",
+  "arguments": ["/usr/bin/clang", "-c", "-Qunused-arguments", "-m64", "-g", "-O0", "-std=c++20", "-Isrc", "-I../libwebrtc_build/src", "-DWEBRTC_POSIX", "-DWEBRTC_LINUX", "-DWEBRTC_USE_X11", "-DSPDLOG_SHARED_LIB", "-DSPDLOG_COMPILED_LIB", "-DSPDLOG_FMT_EXTERNAL", "-Wno-deprecated-declarations", "-o", "build/.objs/dezk/linux/x86_64/debug/src/client/peer_client.cc.o", "src/client/peer_client.cc"],
+  "file": "src/client/peer_client.cc"
+},
+{
+  "directory": "/home/doubleleft/webrtc_app",
+  "arguments": ["/usr/bin/clang", "-c", "-Qunused-arguments", "-m64", "-g", "-O0", "-std=c++20", "-Isrc", "-I../libwebrtc_build/src", "-DWEBRTC_POSIX", "-DWEBRTC_LINUX", "-DWEBRTC_USE_X11", "-DSPDLOG_SHARED_LIB", "-DSPDLOG_COMPILED_LIB", "-DSPDLOG_FMT_EXTERNAL", "-Wno-deprecated-declarations", "-o", "build/.objs/dezk/linux/x86_64/debug/src/client/signal_client.cc.o", "src/client/signal_client.cc"],
+  "file": "src/client/signal_client.cc"
+},
+{
+  "directory": "/home/doubleleft/webrtc_app",
+  "arguments": ["/usr/bin/clang", "-c", "-Qunused-arguments", "-m64", "-g", "-O0", "-std=c++20", "-Isrc", "-I../libwebrtc_build/src", "-DWEBRTC_POSIX", "-DWEBRTC_LINUX", "-DWEBRTC_USE_X11", "-DSPDLOG_SHARED_LIB", "-DSPDLOG_COMPILED_LIB", "-DSPDLOG_FMT_EXTERNAL", "-Wno-deprecated-declarations", "-o", "build/.objs/dezk/linux/x86_64/debug/src/client/main_window.cc.o", "src/client/main_window.cc"],
+  "file": "src/client/main_window.cc"
+},
+{
+  "directory": "/home/doubleleft/webrtc_app",
+  "arguments": ["/usr/bin/clang", "-c", "-Qunused-arguments", "-m64", "-g", "-O0", "-std=c++20", "-Isrc", "-I../libwebrtc_build/src", "-DWEBRTC_POSIX", "-DWEBRTC_LINUX", "-DWEBRTC_USE_X11", "-DSPDLOG_SHARED_LIB", "-DSPDLOG_COMPILED_LIB", "-DSPDLOG_FMT_EXTERNAL", "-Wno-deprecated-declarations", "-o", "build/.objs/dezk/linux/x86_64/debug/src/client/main.cc.o", "src/client/main.cc"],
+  "file": "src/client/main.cc"
+},
+{
+  "directory": "/home/doubleleft/webrtc_app",
+  "arguments": ["/usr/bin/clang", "-c", "-Qunused-arguments", "-m64", "-g", "-O0", "-std=c17", "-Isrc", "-I../libwebrtc_build/src", "-DWEBRTC_POSIX", "-DWEBRTC_LINUX", "-DWEBRTC_USE_X11", "-DSPDLOG_SHARED_LIB", "-DSPDLOG_COMPILED_LIB", "-DSPDLOG_FMT_EXTERNAL", "-o", "build/.objs/dezk/linux/x86_64/debug/src/client/renderer.c.o", "src/client/renderer.c"],
+  "file": "src/client/renderer.c"
+},
+{
+  "directory": "/home/doubleleft/webrtc_app",
+  "arguments": ["/usr/bin/clang", "-c", "-Qunused-arguments", "-m64", "-g", "-O0", "-std=c17", "-Isrc", "-I../libwebrtc_build/src", "-DWEBRTC_POSIX", "-DWEBRTC_LINUX", "-DWEBRTC_USE_X11", "-DSPDLOG_SHARED_LIB", "-DSPDLOG_COMPILED_LIB", "-DSPDLOG_FMT_EXTERNAL", "-o", "build/.objs/dezk/linux/x86_64/debug/src/client/microui.c.o", "src/client/microui.c"],
+  "file": "src/client/microui.c"
+}]

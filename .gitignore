@@ -1,9 +1,12 @@
+# Xmake cache
+.xmake/
+build/
+
+# MacOS Cache
+.DS_Store
+
+
 .cache
-.vs
 .vscode
-compile_commands.json
-build
-libwebrtc/debug*
-libwebrtc/release
 third_party
-vcpkg_installed
+libwebrtc/
