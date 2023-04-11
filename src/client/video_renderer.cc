@@ -4,8 +4,11 @@
 #include <cstdio>
 #include <stdexcept>
 
-#include <SDL2/SDL_render.h>
+#include <GL/glew.h>
 #include <SDL2/SDL_opengl.h>
+#include <SDL2/SDL_render.h>
+#include <SDL2/SDL_syswm.h>
+#include <SDL2/SDL_version.h>
 #include <SDL2/SDL_video.h>
 
 static const std::string vs_src = R"(
@@ -43,52 +46,60 @@ static const std::string fs_src = R"(
     }
 )";
 static const float pos_buffer[] = {
-    -1.0, +1.0, // lt
-    +1.0, +1.0, // rt
-    -1.0, -1.0, // lb
-    +1.0, -1.0, // rb
+    -1.0, -1.0, // lt
+    +1.0, -1.0, // rt
+    -1.0, +1.0, // lb
+    +1.0, +1.0, // rb
 };
 static const float tex_buffer[] = {
-    0.0, 0.0, // lt
-    1.0, 0.0, // rt
-    0.0, 1.0, // lb
-    1.0, 1.0, // rb
+    0.0, 1.0, // lt
+    1.0, 1.0, // rt
+    0.0, 0.0, // lb
+    1.0, 0.0, // rb
 };
 
-constexpr int kWidth = 1920;
-constexpr int kHeight = 1080;
-
-VideoRenderer::VideoRenderer()
+std::unique_ptr<VideoRenderer> VideoRenderer::Create(Config conf)
 {
-    window_ = SDL_CreateWindow("video window", 0, 100, kWidth, kHeight,
-                               SDL_WINDOW_OPENGL);
-    SDL_GetWindowSize(window_, &width_, &height_);
+    if (conf.use_opengl) {
+        return std::make_unique<VideoRenderer>(std::move(conf), nullptr);
+    } else {
+        return std::make_unique<VideoRenderer>(std::move(conf));
+    }
+}
+
+VideoRenderer::VideoRenderer(Config conf) : conf_(std::move(conf))
+{
+    window_ =
+        SDL_CreateWindow(conf_.name.c_str(), 0, 100, conf_.width, conf_.height,
+                         SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI);
     renderer_ = SDL_CreateRenderer(window_, -1, SDL_RENDERER_ACCELERATED);
     texture_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_IYUV,
-                                 SDL_TEXTUREACCESS_STREAMING, kWidth, kHeight);
+                                 SDL_TEXTUREACCESS_STREAMING, conf_.width,
+                                 conf_.height);
     SDL_SetRenderDrawColor(renderer_, 0, 128, 128, 255);
     SDL_RenderClear(renderer_);
     SDL_RenderPresent(renderer_);
 }
 
-VideoRenderer::VideoRenderer(SDL_Window *win) : window_(win)
+VideoRenderer::VideoRenderer(Config conf, SDL_Window *win)
+    : window_(win), conf_(std::move(conf))
 {
-    window_ = SDL_CreateWindow("video window", kWidth, kHeight, kWidth, kHeight,
-                               SDL_WINDOW_OPENGL);
-
-    glctx_ = SDL_GL_CreateContext(window_);
+    window_ =
+        SDL_CreateWindow(conf_.name.c_str(), 0, 100, conf_.width, conf_.height,
+                         SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI);
 
     if (glewInit() != GLEW_OK) {
         throw std::runtime_error("glew init failed");
     }
+    glctx_ = SDL_GL_CreateContext(window_);
+    assert(glctx_);
 
-    SDL_GetWindowSize(window_, &width_, &height_);
-
-    glViewport(0, 0, width_, height_);
-    /* glClearColor(0, 0.2, 0.2, 1); */
-    /* glClearDepth(1.0); */
-    /* glClear(GL_COLOR_BUFFER_BIT); */
+    glViewport(0, 0, conf_.width, conf_.height);
+    glClearColor(0, 0.2, 0.2, 1);
+    glClearDepth(1.0);
+    glClear(GL_COLOR_BUFFER_BIT);
     glEnable(GL_DEPTH_TEST);
+    glEnable(GL_TEXTURE_2D);
     glDepthFunc(GL_LEQUAL);
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 
@@ -107,8 +118,8 @@ VideoRenderer::VideoRenderer(SDL_Window *win) : window_(win)
     textures_[U] = create_texture();
     textures_[V] = create_texture();
 
-    /* glDrawArrays(GL_TRIANGLE_STRIP, 0, 4); */
-    /* SDL_GL_SwapWindow(window_); */
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    SDL_GL_SwapWindow(window_);
 }
 
 VideoRenderer::~VideoRenderer()
@@ -123,6 +134,15 @@ VideoRenderer::~VideoRenderer()
     glDeleteTextures(1, &textures_[Y]);
 }
 
+webrtc::WindowId VideoRenderer::get_window_handle() const
+{
+    auto sdlid = SDL_GetWindowID(window_);
+    SDL_SysWMinfo info;
+    SDL_VERSION(&info.version)
+    SDL_GetWindowWMInfo(window_, &info);
+    return info.info.x11.window;
+}
+
 void VideoRenderer::update_frame()
 {
     rtc::scoped_refptr<webrtc::VideoFrameBuffer> frame = nullptr;
@@ -130,8 +150,7 @@ void VideoRenderer::update_frame()
     if (frame) {
         auto yuv = frame->GetI420();
         if (yuv) {
-
-            if (glctx_)
+            if (conf_.use_opengl)
                 update_gl_textures(yuv->DataY(), yuv->DataU(), yuv->DataV());
             else
                 update_sdl_textures(yuv->DataY(), yuv->DataU(), yuv->DataV());
@@ -205,7 +224,7 @@ GLuint VideoRenderer::create_buffer(int location, const float data[], size_t sz)
     glGenBuffers(1, &buf);
     glBindBuffer(GL_ARRAY_BUFFER, buf);
     glBufferData(GL_ARRAY_BUFFER, sz, data, GL_DYNAMIC_DRAW);
-    glVertexAttribPointer(location, 2, GL_FLOAT, false, 8, nullptr);
+    glVertexAttribPointer(location, 2, GL_FLOAT, false, 8, data);
     glEnableVertexAttribArray(location);
 
     return buf;
@@ -216,9 +235,9 @@ void VideoRenderer::update_sdl_textures(const void *ydata, const void *udata,
 {
     // TODO: use SDL_LockTexture instead?
     SDL_UpdateYUVTexture(texture_, nullptr, //
-                         static_cast<const uint8_t *>(ydata), kWidth,
-                         static_cast<const uint8_t *>(udata), kWidth / 2,
-                         static_cast<const uint8_t *>(vdata), kWidth / 2);
+                         static_cast<const uint8_t *>(ydata), conf_.width,
+                         static_cast<const uint8_t *>(udata), conf_.width / 2,
+                         static_cast<const uint8_t *>(vdata), conf_.width / 2);
     SDL_RenderCopy(renderer_, texture_, nullptr, nullptr);
     SDL_RenderPresent(renderer_);
     SDL_RenderFlush(renderer_);
@@ -227,7 +246,7 @@ void VideoRenderer::update_sdl_textures(const void *ydata, const void *udata,
 void VideoRenderer::dump_frame(const webrtc::VideoFrame &frame, int id)
 {
     auto buf = frame.video_frame_buffer();
-    auto scaled = buf->Scale(kWidth, kHeight);
+    auto scaled = buf->Scale(conf_.width, conf_.height);
     auto yuv = scaled->GetI420();
     char name[20] = {0};
     sprintf(name, "frame-%02d.yuv", id);
@@ -257,26 +276,27 @@ void VideoRenderer::update_gl_textures(const void *ydata, const void *udata,
 {
     SDL_GL_MakeCurrent(window_, glctx_);
 
-    glBindTexture(GL_TEXTURE_2D, textures_[Y]);
     glActiveTexture(GL_TEXTURE0 + Y);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE, width_, height_, 0,
-                 GL_LUMINANCE, GL_UNSIGNED_BYTE, ydata);
     glUniform1i(glGetUniformLocation(program_, "uTexY"), Y);
+    glBindTexture(GL_TEXTURE_2D, textures_[Y]);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE, conf_.width, conf_.height, 0,
+                 GL_LUMINANCE, GL_UNSIGNED_BYTE, ydata);
 
-    glBindTexture(GL_TEXTURE_2D, textures_[U]);
     glActiveTexture(GL_TEXTURE0 + U);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE, width_ / 2, height_ / 2, 0,
-                 GL_LUMINANCE, GL_UNSIGNED_BYTE, udata);
     glUniform1i(glGetUniformLocation(program_, "uTexU"), U);
+    glBindTexture(GL_TEXTURE_2D, textures_[U]);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE, conf_.width / 2,
+                 conf_.height / 2, 0, GL_LUMINANCE, GL_UNSIGNED_BYTE, udata);
 
-    glBindTexture(GL_TEXTURE_2D, textures_[V]);
     glActiveTexture(GL_TEXTURE0 + V);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE, width_ / 2, height_ / 2, 0,
-                 GL_LUMINANCE, GL_UNSIGNED_BYTE, vdata);
+    glBindTexture(GL_TEXTURE_2D, textures_[V]);
     glUniform1i(glGetUniformLocation(program_, "uTexV"), V);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE, conf_.width / 2,
+                 conf_.height / 2, 0, GL_LUMINANCE, GL_UNSIGNED_BYTE, vdata);
 
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
+    glFlush();
     SDL_GL_SwapWindow(window_);
 }
 
@@ -284,7 +304,7 @@ void VideoRenderer::update_gl_textures(const void *ydata, const void *udata,
 void VideoRenderer::OnFrame(const webrtc::VideoFrame &frame)
 {
     auto buf = frame.video_frame_buffer();
-    auto scaled = buf->Scale(kWidth, kHeight);
+    auto scaled = buf->Scale(conf_.width, conf_.height);
     auto yuv = scaled->GetI420();
     static int once = 0;
     if (once < 1200 && once % 60 == 0) {
@@ -292,5 +312,9 @@ void VideoRenderer::OnFrame(const webrtc::VideoFrame &frame)
     }
     once++;
 
-    update_sdl_textures(yuv->DataY(), yuv->DataU(), yuv->DataV());
+    if (conf_.use_opengl) {
+        update_gl_textures(yuv->DataY(), yuv->DataU(), yuv->DataV());
+    } else {
+        update_sdl_textures(yuv->DataY(), yuv->DataU(), yuv->DataV());
+    }
 }

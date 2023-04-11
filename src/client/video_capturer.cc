@@ -20,32 +20,29 @@
 class ScreenCaptureImpl : public rtc::VideoSourceInterface<webrtc::VideoFrame>,
                           public webrtc::DesktopCapturer::Callback
 {
-public:
-    enum CaptureType
-    {
+  public:
+    enum CaptureType {
         kWindow = 0,
         kScreen = 1,
     };
 
-public:
-    ScreenCaptureImpl(CaptureType kind = CaptureType::kScreen)
+  public:
+    ScreenCaptureImpl(const ScreenCapturer::Config &conf,
+                      CaptureType kind = CaptureType::kScreen)
         : desktop_capturer_(nullptr), thread_(), sinks_()
     {
         auto opts = webrtc::DesktopCaptureOptions::CreateDefault();
-#ifdef POSIX
+#ifdef __unix__
         std::string display = std::getenv("DISPLAY");
         logger::debug("display: {}", display);
         auto xdisplay = webrtc::SharedXDisplay::Create(display);
         opts.set_x_display(xdisplay);
 #endif
 
-        if (kind == CaptureType::kScreen)
-        {
+        if (kind == CaptureType::kScreen) {
             desktop_capturer_ =
                 webrtc::DesktopCapturer::CreateScreenCapturer(opts);
-        }
-        else
-        {
+        } else {
             desktop_capturer_ =
                 webrtc::DesktopCapturer::CreateWindowCapturer(opts);
         }
@@ -53,21 +50,21 @@ public:
         webrtc::DesktopCapturer::SourceList sources;
         desktop_capturer_->GetSourceList(&sources);
         logger::debug("capture sources: ");
-        for (auto &src : sources)
-        {
+        for (auto &src : sources) {
             logger::debug(src.title);
+        }
+
+        for (auto id : conf.exlude_window_id) {
+            desktop_capturer_->SetExcludedWindow(id);
         }
 
         start();
     }
 
-    virtual ~ScreenCaptureImpl() override{};
-
     bool running() const { return running_; }
 
     void start()
     {
-        // TODO: create dedicate thread
         running_ = true;
         thread_ = std::thread(&ScreenCaptureImpl::capture_thread, this);
         desktop_capturer_->Start(this);
@@ -82,26 +79,21 @@ public:
     void capture_thread()
     {
         logger::debug("start capture thread");
-        while (running())
-        {
+        while (running()) {
             desktop_capturer_->CaptureFrame();
         }
     }
 
-public: // impl VideoSourceInterface
+  public: // impl VideoSourceInterface
     void AddOrUpdateSink(rtc::VideoSinkInterface<webrtc::VideoFrame> *sink,
                          const rtc::VideoSinkWants &wants) override
     {
         auto pair = std::find_if(
             sinks_.begin(), sinks_.end(),
-            [sink](const SinkPair &pair)
-            { return pair.sink == sink; });
-        if (pair == sinks_.end())
-        {
-            sinks_.push_back(SinkPair(sink, wants));
-        }
-        else
-        {
+            [sink](const SinkPair &pair) { return pair.sink == sink; });
+        if (pair == sinks_.end()) {
+            sinks_.emplace_back(sink, wants);
+        } else {
             pair->wants = wants;
         }
     };
@@ -110,20 +102,18 @@ public: // impl VideoSourceInterface
     {
         sinks_.erase(std::remove_if(
             sinks_.begin(), sinks_.end(),
-            [sink](const SinkPair &pair)
-            { return pair.sink == sink; }));
+            [sink](const SinkPair &pair) { return pair.sink == sink; }));
     };
 
     void RequestRefreshFrame() override { desktop_capturer_->CaptureFrame(); };
 
-public: // impl DesktopCapturer::Callback
+  public: // impl DesktopCapturer::Callback
     void OnCaptureResult(webrtc::DesktopCapturer::Result result,
                          std::unique_ptr<webrtc::DesktopFrame> frame) override
     {
         static int16_t id = 0;
         /* logger::debug("OnCaptureResult: "); */
-        if (result != webrtc::DesktopCapturer::Result::SUCCESS)
-        {
+        if (result != webrtc::DesktopCapturer::Result::SUCCESS) {
             return;
         }
 
@@ -135,14 +125,7 @@ public: // impl DesktopCapturer::Callback
             buffer->MutableDataU(), buffer->StrideU(), buffer->MutableDataV(),
             buffer->StrideV(), 0, 0, frame->size().width(),
             frame->size().height(), buffer->width(), buffer->height(),
-            libyuv::kRotate0, libyuv::FOURCC_RGBA);
-
-        // DesktopFrame is always BGRA
-        /* libyuv::BGRAToI420(frame->data(), frame->stride(), */
-        /*                    buffer->MutableDataY(), buffer->StrideY(), */
-        /*                    buffer->MutableDataU(), buffer->StrideU(), */
-        /*                    buffer->MutableDataV(), buffer->StrideV(), */
-        /*                    frame->size().width(), frame->size().height()); */
+            libyuv::kRotate0, libyuv::FOURCC_ARGB);
 
         webrtc::VideoFrame::Builder builder;
         auto captured_frame = builder.set_rotation(webrtc::kVideoRotation_0)
@@ -153,15 +136,13 @@ public: // impl DesktopCapturer::Callback
 
         // send to sinks
         std::for_each(sinks_.begin(), sinks_.end(),
-                      [&captured_frame](const SinkPair &pair)
-                      {
+                      [&captured_frame](const SinkPair &pair) {
                           pair.sink->OnFrame(captured_frame);
                       });
     }
 
-protected:
-    struct SinkPair
-    {
+  protected:
+    struct SinkPair {
         SinkPair(rtc::VideoSinkInterface<webrtc::VideoFrame> *sink,
                  const rtc::VideoSinkWants &wants)
             : sink(sink), wants(wants)
@@ -171,21 +152,23 @@ protected:
         rtc::VideoSinkWants wants;
     };
 
-private:
+  private:
     std::unique_ptr<webrtc::DesktopCapturer> desktop_capturer_;
     std::thread thread_;
     std::vector<SinkPair> sinks_;
     bool running_ = false;
 };
 
-rtc::scoped_refptr<webrtc::VideoTrackSource> ScreenCapturer::Create()
+rtc::scoped_refptr<ScreenCapturer> ScreenCapturer::Create(Config conf)
 {
-    return rtc::make_ref_counted<ScreenCapturer>();
+    return rtc::make_ref_counted<ScreenCapturer>(conf);
 }
 
-ScreenCapturer::ScreenCapturer()
+ScreenCapturer::ScreenCapturer(Config conf)
     : webrtc::VideoTrackSource(false),
-      source_(std::make_unique<ScreenCaptureImpl>(ScreenCaptureImpl::kScreen))
+      source_(std::make_unique<ScreenCaptureImpl>(conf,
+                                                  ScreenCaptureImpl::kScreen)),
+      conf_(std::move(conf))
 {
     logger::debug("ScreenCapturer created");
 }

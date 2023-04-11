@@ -8,10 +8,10 @@
 #include <ranges>
 #include <string>
 #include <thread>
+#include <utility>
 
 #include <boost/asio.hpp>
 #include <boost/beast.hpp>
-#include <utility>
 
 namespace beast = boost::beast;
 namespace json = boost::json;
@@ -53,9 +53,9 @@ struct SignalClient : public SignalingObserver {
     explicit SignalClient(io_context &ctx, Config conf = kDefaultConfig);
     explicit SignalClient(io_context &ctx, const std::string &name)
         : SignalClient(ctx, {name, kDefaultConfig.host, kDefaultConfig.port,
-                           kDefaultConfig.use_websocket,
-                           kDefaultConfig.stream_expire_time,
-                           kDefaultConfig.http_wait_time})
+                             kDefaultConfig.use_websocket,
+                             kDefaultConfig.stream_expire_time,
+                             kDefaultConfig.http_wait_time})
     {
     }
     ~SignalClient();

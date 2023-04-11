@@ -18,6 +18,17 @@ struct PeerClient : public webrtc::PeerConnectionObserver,
                     public PeerObserver {
 
   public:
+    struct ChanMessage;
+    using VideoSourcePtr = webrtc::VideoTrackSourceInterface *;
+    using VideoSinkPtr = rtc::VideoSinkInterface<webrtc::VideoFrame> *;
+    using MessageQueue = std::queue<ChanMessage>;
+
+    struct ChanMessage {
+        const uint8_t *data;
+        size_t size;
+        bool binary;
+    };
+
     struct SetRemoteSDPCallback
         : public webrtc::SetRemoteDescriptionObserverInterface {
         static rtc::scoped_refptr<SetRemoteSDPCallback> Create(PeerClient *that)
@@ -52,8 +63,9 @@ struct PeerClient : public webrtc::PeerConnectionObserver,
     void deletePeerConnection();
     void createLocalTracks();
     void makeCall();
-    void addLocalSinks(rtc::VideoSinkInterface<webrtc::VideoFrame> *);
-    void addRemoteSinks(rtc::VideoSinkInterface<webrtc::VideoFrame> *);
+    void addVideoSource(VideoSourcePtr);
+    void addLocalSinks(VideoSinkPtr);
+    void addRemoteSinks(VideoSinkPtr);
     void onRemoteOffer(const std::string &);
     void onRemoteAnswer(const std::string &);
     void onRemoteCandidate(const std::string &);
@@ -62,6 +74,11 @@ struct PeerClient : public webrtc::PeerConnectionObserver,
         signaling_observer_ = ob;
     }
     bool isCaller() const { return is_caller_; }
+
+    // channel messaging, TODO: abastract interface
+    bool sendTextMessage(const std::string &text);
+    bool sendBinaryMessage(const uint8_t *data, size_t size);
+    std::optional<ChanMessage> recvMessage();
 
   public:
     void OnSignal(MessageType, const std::string &offer) override;
@@ -99,16 +116,20 @@ struct PeerClient : public webrtc::PeerConnectionObserver,
     void OnBufferedAmountChange(uint64_t) override {}
 
   private:
-    // resources
+    // external resources
+    VideoSourcePtr video_src_ = nullptr;
+    VideoSinkPtr local_sink_ = nullptr;
+    VideoSinkPtr remote_sink_ = nullptr;
+    SignalingObserver *signaling_observer_ = nullptr;
+    // internal resources
     rtc::scoped_refptr<webrtc::PeerConnectionFactoryInterface> pc_factory_ =
         nullptr;
     rtc::scoped_refptr<webrtc::PeerConnectionInterface> pc_ = nullptr;
     rtc::scoped_refptr<webrtc::DataChannelInterface> local_chan_ = nullptr;
     rtc::scoped_refptr<webrtc::DataChannelInterface> remote_chan_ = nullptr;
-    rtc::VideoSinkInterface<webrtc::VideoFrame> *local_sink_ = nullptr;
-    rtc::VideoSinkInterface<webrtc::VideoFrame> *remote_sink_ = nullptr;
     std::unique_ptr<rtc::Thread> signaling_thread_ = nullptr;
-    SignalingObserver *signaling_observer_ = nullptr;
+
+    std::unique_ptr<MessageQueue> mq_;
 
     // states
     // TODO: perfect negotiation (e.g. use `polite peer` strategy)

@@ -6,7 +6,10 @@
 
 #include "peer_client.hh"
 #include "signal_client.hh"
+#include "video_capturer.hh"
 #include "video_renderer.hh"
+
+#include <SDL2/SDL_events.h>
 
 using mu_Context = struct mu_Context;
 
@@ -22,6 +25,9 @@ class MainWindow
     void render_windows(mu_Context *ctx);
     void peers_window(mu_Context *ctx);
     void login_window(mu_Context *ctx);
+    void handle_mu_events();
+    void handle_main_event(const SDL_Event &e);
+    void handle_remote_event(const SDL_Event &e);
 
   private:
     std::string title_;
@@ -30,6 +36,7 @@ class MainWindow
     std::unique_ptr<std::thread> thread_;
     std::unique_ptr<SignalClient> cc_;
     rtc::scoped_refptr<PeerClient> pc_;
-    std::unique_ptr<VideoRenderer> local_renderer_;
-    std::unique_ptr<VideoRenderer> remote_renderer_;
+    rtc::scoped_refptr<ScreenCapturer> video_src_ = nullptr;
+    std::unique_ptr<VideoRenderer> local_renderer_ = nullptr;
+    std::unique_ptr<VideoRenderer> remote_renderer_ = nullptr;
 };

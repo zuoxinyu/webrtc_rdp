@@ -9,12 +9,27 @@
 
 #include "api/video/video_frame.h"
 #include "api/video/video_sink_interface.h"
+#include "modules/desktop_capture/desktop_capture_types.h"
+#include "rtc_base/ref_count.h"
 
 struct VideoRenderer : public rtc::VideoSinkInterface<webrtc::VideoFrame> {
   public:
-    explicit VideoRenderer(SDL_Window *);
-    explicit VideoRenderer();
+    struct Config {
+        std::string name;
+        int width;
+        int height;
+        bool use_opengl;
+    };
+
+  public:
+    static std::unique_ptr<VideoRenderer> Create(Config conf);
+
+  public:
+    explicit VideoRenderer(Config conf, SDL_Window *);
+    explicit VideoRenderer(Config conf);
     ~VideoRenderer() override;
+    webrtc::WindowId get_window_handle() const;
+    SDL_Window *get_window() const { return window_; }
     void update_frame();
 
   private:
@@ -43,8 +58,7 @@ struct VideoRenderer : public rtc::VideoSinkInterface<webrtc::VideoFrame> {
     GLuint tex_buffer_ = 0;
     GLuint pos_buffer_ = 0;
     // properties
-    int width_ = 0;
-    int height_ = 0;
+    Config conf_;
     // states
 
     boost::sync_queue<rtc::scoped_refptr<webrtc::VideoFrameBuffer>>

@@ -30,7 +30,7 @@ static mu_Context *init()
 {
     SDL_Init(SDL_INIT_EVERYTHING);
     r_init();
-    mu_Context *ctx = new mu_Context;
+    auto *ctx = new mu_Context;
     mu_init(ctx);
     ctx->text_width = text_width;
     ctx->text_height = text_height;

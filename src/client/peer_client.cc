@@ -1,6 +1,5 @@
 #include "peer_client.hh"
 #include "logger.hh"
-#include "video_capturer.hh"
 
 #include "api/audio_codecs/builtin_audio_decoder_factory.h"
 #include "api/audio_codecs/builtin_audio_encoder_factory.h"
@@ -22,7 +21,7 @@ static const std::string kDataChanId = "data_chan";
 
 using SignalingState = webrtc::PeerConnectionInterface::SignalingState;
 
-PeerClient::PeerClient() = default;
+PeerClient::PeerClient() : mq_(std::make_unique<MessageQueue>()) {}
 
 bool PeerClient::createPeerConnection()
 {
@@ -74,9 +73,8 @@ void PeerClient::createLocalTracks()
         logger::error("failed to add audio track");
     }
 
-    auto video_src = ScreenCapturer::Create();
-    auto video_track =
-        pc_factory_->CreateVideoTrack(kVideoLabel, video_src.get());
+    assert(video_src_);
+    auto video_track = pc_factory_->CreateVideoTrack(kVideoLabel, video_src_);
 
     if (local_sink_) {
         video_track->AddOrUpdateSink(local_sink_, rtc::VideoSinkWants());
@@ -93,21 +91,15 @@ void PeerClient::createLocalTracks()
         logger::error("failed to add data channel");
     } else {
         local_chan_ = data_chan.value();
-        local_chan_->RegisterObserver(this);
+        // local_chan_->RegisterObserver(this);
     }
 }
 
-void PeerClient::addLocalSinks(
-    rtc::VideoSinkInterface<webrtc::VideoFrame> *sink)
-{
-    local_sink_ = sink;
-}
+void PeerClient::addVideoSource(VideoSourcePtr src) { video_src_ = src; }
 
-void PeerClient::addRemoteSinks(
-    rtc::VideoSinkInterface<webrtc::VideoFrame> *sink)
-{
-    remote_sink_ = sink;
-}
+void PeerClient::addLocalSinks(VideoSinkPtr sink) { local_sink_ = sink; }
+
+void PeerClient::addRemoteSinks(VideoSinkPtr sink) { remote_sink_ = sink; }
 
 void PeerClient::OnSignal(MessageType mt, const std::string &payload)
 {
@@ -264,6 +256,7 @@ void PeerClient::OnDataChannel(
     logger::info("new remote channel [id={} proto={}] connected",
                  data_channel->id(), data_channel->protocol());
     remote_chan_ = data_channel;
+    remote_chan_->RegisterObserver(this);
 };
 
 void PeerClient::OnIceCandidate(const webrtc::IceCandidateInterface *candidate)
@@ -295,4 +288,29 @@ void PeerClient::OnMessage(const webrtc::DataBuffer &msg)
     } else {
         logger::info("recv remote binary message: {}", msg.size());
     }
+    mq_->push(PeerClient::ChanMessage{msg.data.data(), msg.size(), msg.binary});
+}
+
+bool PeerClient::sendTextMessage(const std::string &text)
+{
+    webrtc::DataBuffer blob(text);
+    return local_chan_->Send(blob);
+}
+
+bool PeerClient::sendBinaryMessage(const uint8_t *data, size_t size)
+{
+    rtc::CopyOnWriteBuffer buf(data, size);
+    webrtc::DataBuffer blob{buf, true};
+    return local_chan_->Send(blob);
+}
+
+std::optional<PeerClient::ChanMessage> PeerClient::recvMessage()
+{
+    if (mq_->empty())
+        return {};
+
+    ChanMessage m = mq_->front();
+    mq_->pop();
+
+    return m;
 }

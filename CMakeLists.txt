@@ -13,9 +13,11 @@ if (UNIX)
     set(CMAKE_C_COMPILER clang)
     set(CMAKE_CXX_COMPILER clang++)
     set(CMAKE_CXX_EXTENSIONS OFF)
-    set(CMAKE_CXX_FLAGS "-Wno-deprecated-declarations -fexperimental-library -gsplit-dwarf")# -fno-stack-protector")
+    set(CMAKE_CXX_FLAGS "-Wno-deprecated-declarations -fexperimental-library -gsplit-dwarf")
+    # -fno-stack-protector")
 elseif(WIN32)
-    set(CMAKE_CXX_FLAGS "-Wno-deprecated-declarations -fexperimental-library -gsplit-dwarf")# -fno-stack-protector")
+    set(CMAKE_CXX_FLAGS "-Wno-deprecated-declarations -fexperimental-library -gsplit-dwarf")
+    # -fno-stack-protector")
 endif()
 
 message(STATUS "libwebrtc: " ${LIBWEBRTC})
@@ -75,8 +77,7 @@ include_directories(
 if(WIN32)
     include_directories(
         ${WEBRTC_SRC_DIR}/third_party/abseil-cpp
-        ${WEBRTC_SRC_DIR}/third_party/libyuv/include
-        )
+        ${WEBRTC_SRC_DIR}/third_party/libyuv/include)
     target_link_libraries(chat_server PRIVATE ${Boost_LIBRARIES})
     target_link_libraries(chat_server PRIVATE spdlog::spdlog_header_only)
     target_link_libraries(${PROJECT_NAME} PRIVATE ${LIBWEBRTC})
