@@ -233,6 +233,7 @@ void PeerClient::OnAddTrack(
     if (track->kind() == webrtc::MediaStreamTrackInterface::kVideoKind) {
         auto video_track = static_cast<webrtc::VideoTrackInterface *>(track);
         if (remote_sink_) {
+            rtc::VideoSinkWants wants;
             video_track->AddOrUpdateSink(remote_sink_, rtc::VideoSinkWants());
         }
     }

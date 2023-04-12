@@ -246,8 +246,7 @@ void VideoRenderer::update_sdl_textures(const void *ydata, const void *udata,
 void VideoRenderer::dump_frame(const webrtc::VideoFrame &frame, int id)
 {
     auto buf = frame.video_frame_buffer();
-    auto scaled = buf->Scale(conf_.width, conf_.height);
-    auto yuv = scaled->GetI420();
+    auto yuv = buf->GetI420();
     char name[20] = {0};
     sprintf(name, "frame-%02d.yuv", id);
     ::FILE *f = ::fopen(name, "wb+");
@@ -300,7 +299,7 @@ void VideoRenderer::update_gl_textures(const void *ydata, const void *udata,
     SDL_GL_SwapWindow(window_);
 }
 
-// running on capture thread
+// running on capture thread (local) or (remote)?
 void VideoRenderer::OnFrame(const webrtc::VideoFrame &frame)
 {
     auto buf = frame.video_frame_buffer();

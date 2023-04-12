@@ -4,8 +4,7 @@ CompileFlags:
    - -xc++
    - -std=c++20
    - -ferror-limit=0
-   - -I/home/doubleleft/libwebrtc_build/src
-   - -Imicroui/src
+   - -I/home/doubleleft/webrtc/src
    - -Isrc
    - -DWEBRTC_POSIX
    - -DWEBRTC_LINUX

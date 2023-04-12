@@ -3,8 +3,25 @@ add_rules('mode.debug', 'mode.release')
 set_toolchains('clang', 'yasm')
 set_defaultmode("debug")
 
-local webrtc_src_dir = '../libwebrtc_build/src'
-local webrtc_out_dir = webrtc_src_dir .. '/out/Linux-x64-debug'
+local webrtc_dir = '../webrtc'
+local webrtc_src_dir = path.join(webrtc_dir, 'src')
+local webrtc_out_dir = 'out/linux-debug'
+local webrtc_obj_dir = path.join(webrtc_src_dir, webrtc_out_dir, 'obj')
+
+local gn_args = {
+    'is_debug=true',
+    'enable_libaom=true',     -- av1
+    'use_debug_fission=true', -- -gsplit-dwarf
+    'use_custom_libcxx=false',
+    'use_rtti=true',          -- typeinfo
+    'rtc_use_h264=true',
+    'rtc_include_tests=false',
+    'rtc_enable_protobuf=false',
+    'rtc_enable_symbol_export=true',
+}
+local check_cmd = [[git checkout -b m113 refs/remotes/branch-heads/5672]]
+local gn_cmd = string.format([[gn gen %s --args="%s"]], webrtc_out_dir, table.concat(gn_args, ' '))
+local ninja_cmd = string.format([[ninja -C %s]], webrtc_out_dir)
 
 add_requires('SDL2', 'spdlog')
 add_requires('boost_json', 'boost_url', {
@@ -27,8 +44,9 @@ target('dezk', function()
     add_linkdirs('libwebrtc/debug')
     add_links('webrtc')
     add_syslinks('dbus-1', 'glib-2.0', 'gobject-2.0', 'gmodule-2.0', 'gio-2.0', 'gbm')
-    add_syslinks('xcb', 'X11', 'Xext', 'Xfixes', 'Xdamage', 'Xrandr', 'Xrender', 'Xau', 'Xdmcp', 'Xcomposite', 'Xtst')
-    add_syslinks('rt', 'atomic', 'GL', 'GLEW')
+    add_syslinks('xdo', 'xcb', 'X11', 'Xext', 'Xfixes', 'Xdamage', 'Xrandr', 'Xrender', 'Xau', 'Xdmcp', 'Xcomposite',
+        'Xtst')
+    add_syslinks('rt', 'atomic', 'GL', 'GLEW', 'drm')
 
     add_deps('webrtc')
 end)
@@ -47,16 +65,55 @@ target('webrtc', function()
     set_languages('c17', 'cxx17')
     add_rules('c++')
     set_targetdir('libwebrtc/debug')
-    add_files(webrtc_out_dir .. '/obj/**.o')
+    add_files(webrtc_obj_dir .. '/**.o')
 
-    remove_files(webrtc_out_dir .. '/obj/third_party/yasm/gen*/**.o')
-    remove_files(webrtc_out_dir .. '/obj/third_party/yasm/re2c/**.o')
-    remove_files(webrtc_out_dir .. '/obj/third_party/yasm/yasm/**.o')
-    remove_files(webrtc_out_dir .. '/obj/third_party/protobuf/protoc/*.o')
-    remove_files(webrtc_out_dir .. '/obj/third_party/protobuf/protobuf_full/*.o')
-    remove_files(webrtc_out_dir .. '/obj/webrtc/examples/**.o')
-    remove_files(webrtc_out_dir .. '/obj/webrtc/modules/audio_coding/delay_test/utility.o')
-    remove_files(webrtc_out_dir .. '/obj/webrtc/modules/modules_tests/utility.o')
-    remove_files(webrtc_out_dir .. '/obj/webrtc/modules/video_capture/video_capture/video_capture_external.o')
-    remove_files(webrtc_out_dir .. '/obj/webrtc/modules/video_capture/video_capture/device_info_external.o')
+    remove_files(webrtc_obj_dir .. '/third_party/yasm/gen*/**.o')
+    remove_files(webrtc_obj_dir .. '/third_party/yasm/re2c/**.o')
+    remove_files(webrtc_obj_dir .. '/third_party/yasm/yasm/**.o')
+    remove_files(webrtc_obj_dir .. '/third_party/protobuf/protoc/*.o')
+    remove_files(webrtc_obj_dir .. '/third_party/protobuf/protobuf_full/*.o')
+    remove_files(webrtc_obj_dir .. '/webrtc/examples/**.o')
+    remove_files(webrtc_obj_dir .. '/webrtc/modules/audio_coding/delay_test/utility.o')
+    remove_files(webrtc_obj_dir .. '/webrtc/modules/modules_tests/utility.o')
+    remove_files(webrtc_obj_dir .. '/webrtc/modules/video_capture/video_capture/video_capture_external.o')
+    remove_files(webrtc_obj_dir .. '/webrtc/modules/video_capture/video_capture/device_info_external.o')
+end)
+
+
+task('fetch-webrtc', function()
+    on_run(function()
+        os.cd(webrtc_dir)
+        os.exec('fetch webrtc')
+        os.cd(webrtc_src_dir)
+        os.exec(check_cmd)
+    end)
+    set_menu {
+        usage = 'xmake fetch-webrtc',
+        description = 'fetch webrtc source from google',
+    }
+end)
+
+task('build-webrtc', function()
+    on_run(function()
+        os.cd(webrtc_src_dir)
+        os.exec(gn_cmd)
+        os.exec(ninja_cmd)
+    end)
+
+    set_menu {
+        usage = 'xmake build-webrtc',
+        description = 'build webrtc source',
+    }
+end)
+
+task('echo-cmd', function()
+    on_run(function()
+        cprint('${yellow}webrtc dir${clear}: %s', path.absolute(webrtc_src_dir))
+        cprint('${yellow}webrtc config cmd${clear}: %s', gn_cmd)
+        cprint('${yellow}webrtc build cmd${clear}: %s', ninja_cmd)
+    end)
+    set_menu {
+        usage = 'xmake echo-cmd',
+        description = 'show webrtc build commands',
+    }
 end)

@@ -1,4 +1,5 @@
 #include "main_window.hh"
+#include "event_executor.hh"
 #include "logger.hh"
 
 extern "C" {
@@ -40,6 +41,8 @@ void MainWindow::run()
     SDL_Window *remote_win = remote_renderer_->get_window();
     SDL_Window *local_win = local_renderer_->get_window();
 
+    auto executor = EventExecutor::create();
+
     auto main_wid = SDL_GetWindowID(main_win);
     auto local_wid = SDL_GetWindowID(local_win);
     auto remote_wid = SDL_GetWindowID(remote_win);
@@ -51,13 +54,16 @@ void MainWindow::run()
         io_ctx_.poll();
 
         SDL_Event e, re;
+        EventExecutor::Event ee;
         std::optional<PeerClient::ChanMessage> msg = pc_->recvMessage();
         if (msg.has_value()) {
             re = *reinterpret_cast<SDL_Event *>(
                 const_cast<uint8_t *>(msg.value().data));
             spdlog::debug("recv peer message [type={}]", re.type);
+
             re.window.windowID = main_wid;
-            SDL_PushEvent(&re);
+            ee.native_ev = re;
+            executor->execute(ee);
         }
 
         while (SDL_PollEvent(&e)) {

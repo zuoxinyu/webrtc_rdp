@@ -45,6 +45,7 @@ struct VideoRenderer : public rtc::VideoSinkInterface<webrtc::VideoFrame> {
     void dump_frame(const webrtc::VideoFrame &frame, int id = 0);
 
   public:
+    // impl VideoSinkInterface
     void OnFrame(const webrtc::VideoFrame &frame) override;
 
   private:
