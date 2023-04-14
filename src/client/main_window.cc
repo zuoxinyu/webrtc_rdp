@@ -1,6 +1,8 @@
 #include "main_window.hh"
 #include "event_executor.hh"
-#include "logger.hh"
+
+#include <cstdlib>
+#include <cstring>
 
 extern "C" {
 #include "microui.h"
@@ -9,28 +11,42 @@ extern "C" {
 }
 
 constexpr int kWidth = 1920;
-constexpr int kHeight = 1080;
+constexpr int kHeight = 1200;
+static const char *defaultHost = nullptr;
 
 MainWindow::MainWindow(mu_Context *ctx, const std::string &title)
     : title_(title), io_ctx_(), ctx_(ctx),
       cc_(std::make_unique<SignalClient>(io_ctx_, title)),
       pc_(rtc::make_ref_counted<PeerClient>())
 {
-    local_renderer_ = VideoRenderer::Create(
-        VideoRenderer::Config{"local", kWidth, kHeight, false});
-    remote_renderer_ = VideoRenderer::Create(
-        VideoRenderer::Config{"remote", kWidth, kHeight, false});
-
-    auto local_win = local_renderer_->get_window_handle();
-    auto remote_win = remote_renderer_->get_window_handle();
-    video_src_ = ScreenCapturer::Create({{remote_win, local_win}});
+    defaultHost = ::getenv("SIGNAL_DEFAULT_HOST");
+    VideoRenderer::Config local_opts = {.name = "local camera video",
+                                        .width = 600,
+                                        .height = 400,
+                                        .use_opengl = false,
+                                        .dump = false,
+                                        .hide = false};
+    VideoRenderer::Config remote_opts = {.name = "remote desktop video",
+                                         .width = kWidth,
+                                         .height = kHeight,
+                                         .use_opengl = false,
+                                         .dump = false,
+                                         .hide = true};
+    local_renderer_ = VideoRenderer::Create(local_opts);
+    remote_renderer_ = VideoRenderer::Create(remote_opts);
+    remote_video_src_ = ScreenCapturer::Create({});
 
     pc_->setSignalingObserver(cc_.get());
     cc_->setPeerObserver(pc_.get());
     if (pc_->createPeerConnection()) {
-        pc_->addVideoSource(video_src_.get());
-        pc_->addLocalSinks(local_renderer_.get());
+        pc_->addRemoteVideoSource(remote_video_src_.get());
         pc_->addRemoteSinks(remote_renderer_.get());
+        if (CameraCapturer::GetDeviceNum() > 0) {
+            local_video_src_ = CameraCapturer::Create(
+                {.width = 600, .height = 400, .fps = 30});
+            pc_->addLocalVideoSource(local_video_src_.get());
+            pc_->addLocalSinks(local_renderer_.get());
+        }
         pc_->createLocalTracks();
     }
 }
@@ -41,7 +57,7 @@ void MainWindow::run()
     SDL_Window *remote_win = remote_renderer_->get_window();
     SDL_Window *local_win = local_renderer_->get_window();
 
-    auto executor = EventExecutor::create();
+    auto executor = EventExecutor::create(remote_win);
 
     auto main_wid = SDL_GetWindowID(main_win);
     auto local_wid = SDL_GetWindowID(local_win);
@@ -59,7 +75,6 @@ void MainWindow::run()
         if (msg.has_value()) {
             re = *reinterpret_cast<SDL_Event *>(
                 const_cast<uint8_t *>(msg.value().data));
-            spdlog::debug("recv peer message [type={}]", re.type);
 
             re.window.windowID = main_wid;
             ee.native_ev = re;
@@ -68,7 +83,7 @@ void MainWindow::run()
 
         while (SDL_PollEvent(&e)) {
             if (e.type == SDL_QUIT) {
-                exit(0);
+                ::exit(0);
             }
 
             if (e.window.windowID == main_wid) {
@@ -122,6 +137,8 @@ void MainWindow::peers_window(mu_Context *ctx)
             }
         }
         mu_end_window(ctx);
+    } else {
+        ::exit(0);
     }
 }
 
@@ -133,6 +150,9 @@ void MainWindow::login_window(mu_Context *ctx)
         int submit = 0;
         static char hostbuf[16] = "127.0.0.1";
         static char portbuf[8] = "8888";
+        if (defaultHost) {
+            ::strcpy(hostbuf, defaultHost);
+        }
         mu_text(ctx, "Host:");
         if (mu_textbox(ctx, hostbuf, sizeof(hostbuf)) & MU_RES_SUBMIT) {
             mu_set_focus(ctx, ctx->last_id);
@@ -162,11 +182,10 @@ void MainWindow::handle_main_event(const SDL_Event &e)
 {
     switch (e.type) {
     case SDL_QUIT:
-        std::exit(EXIT_SUCCESS);
+        ::exit(EXIT_SUCCESS);
         break;
     case SDL_WINDOWEVENT:
         switch (e.window.type) {
-            logger::debug("close window clicked: {}", e.window.windowID);
         case SDL_WINDOWEVENT_CLOSE:
             SDL_DestroyWindow(SDL_GetWindowFromID(e.window.windowID));
             break;
@@ -238,6 +257,5 @@ void MainWindow::handle_remote_event(const SDL_Event &e)
 {
     SDL_Event ev = e;
     // TODO: handle failure
-    logger::debug("send peer message [type={}]", e.type);
     pc_->sendBinaryMessage(reinterpret_cast<const uint8_t *>(&ev), sizeof(ev));
 }

@@ -50,14 +50,14 @@ awaitable<void> SignalClient::signin(std::string host, int port)
     req.set(http::field::content_type, "text/json");
     req.prepare_payload();
 
-    logger::debug("signin request: \n{}", to_str(req));
+    logger::trace("signin request: \n{}", to_str(req));
 
     try {
         stream_.expires_never();
         co_await stream_.async_connect(server, use_awaitable);
         co_await http::async_write(stream_, req, use_awaitable);
         co_await http::async_read(stream_, fb, resp, use_awaitable);
-        logger::debug("server response:\n{}", to_str(resp));
+        logger::trace("server response:\n{}", to_str(resp));
 
         me_.id = resp[http::field::pragma];
         me_.online = true;
@@ -133,9 +133,9 @@ awaitable<void> SignalClient::logout()
 }
 
 awaitable<void> SignalClient::sendMessage(Peer::Id peer_id, std::string payload,
-                                        MessageType mt)
+                                          MessageType mt)
 {
-    logger::debug("send to peer [id={}, type={}]", peer_id,
+    logger::trace("send to peer [id={}, type={}]", peer_id,
                   MessageTypeToString(mt));
 
     std::string target = "/send?peer_id=" + me_.id;
@@ -157,14 +157,14 @@ awaitable<void> SignalClient::sendMessage(Peer::Id peer_id, std::string payload,
     req.body() = json::serialize(msg);
     req.prepare_payload();
 
-    logger::debug("send request:\n{}", to_str(req));
+    logger::trace("send request:\n{}", to_str(req));
     try {
         http::response<http::string_body> resp;
         beast::flat_buffer fb;
 
         co_await http::async_write(stream_, req, use_awaitable);
         co_await http::async_read(stream_, fb, resp, use_awaitable);
-        logger::debug("send response:\n{}", to_str(resp));
+        logger::trace("send response:\n{}", to_str(resp));
     } catch (beast::error_code &ec) {
         logger::error("send failed: {}", ec.what());
     }
@@ -174,7 +174,6 @@ awaitable<void> SignalClient::handlePendingMessages()
 {
     // handle pending messages
     while (!pending_messages_.empty()) {
-        logger::debug("pending messages: {}", pending_messages_.size());
         auto m = pending_messages_.front();
         pending_messages_.pop();
         co_await sendMessage(currentPeer(), m.payload, m.mt);

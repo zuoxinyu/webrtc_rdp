@@ -1,5 +1,6 @@
 #include "logger.hh"
 #include "main_window.hh"
+#include "rtc_base/logging.h"
 
 #include <array>
 #include <cstdio>
@@ -42,16 +43,21 @@ static mu_Context *init()
 #undef SDL_main
 #endif
 
+static const char *KDefaultName = "DEFAULT_SIGNAL_NAME";
+static const char *kDefaultServer = "DEFAULT_SIGNAL_SERVER";
+static const char *kDefaultPort = "DEFAULT_SIGNAL_PORT";
+
 int main(int argc, char *argv[])
 {
     std::string title = "my_name";
     if (argc > 1) {
         title = argv[1];
     }
-    mu_Context *ctx = init();
-
+    rtc::LogMessage::LogToDebug(rtc::LS_ERROR);
     spdlog::set_level(spdlog::level::debug);
     logger::info("Hello dezk");
+
+    mu_Context *ctx = init();
     MainWindow wnd(ctx, title);
     wnd.run();
     return 0;

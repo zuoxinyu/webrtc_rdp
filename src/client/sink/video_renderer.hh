@@ -19,6 +19,8 @@ struct VideoRenderer : public rtc::VideoSinkInterface<webrtc::VideoFrame> {
         int width;
         int height;
         bool use_opengl;
+        bool dump;
+        bool hide;
     };
 
   public:
@@ -28,7 +30,7 @@ struct VideoRenderer : public rtc::VideoSinkInterface<webrtc::VideoFrame> {
     explicit VideoRenderer(Config conf, SDL_Window *);
     explicit VideoRenderer(Config conf);
     ~VideoRenderer() override;
-    webrtc::WindowId get_window_handle() const;
+    webrtc::WindowId get_native_window_handle() const;
     SDL_Window *get_window() const { return window_; }
     void update_frame();
 

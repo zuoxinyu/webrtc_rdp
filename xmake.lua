@@ -34,21 +34,25 @@ target('dezk', function()
     set_default(true)
     set_kind('binary')
     set_languages('c17', 'cxx20')
-    add_defines('WEBRTC_POSIX', 'WEBRTC_LINUX', 'WEBRTC_USE_X11')
+    add_defines('WEBRTC_POSIX', 'WEBRTC_LINUX', 'WEBRTC_USE_X11', 'RTC_DISABLE_LOGGING')
     add_cxxflags('-Wno-deprecated-declarations')
 
     add_includedirs('src', webrtc_src_dir)
-    add_files('src/client/*.cc', 'src/client/*.c')
+    add_files('src/client/**.cc', 'src/client/**.c')
 
     add_packages('boost_json', 'boost_url', 'boost_beast', 'spdlog', 'SDL2')
-    add_linkdirs('libwebrtc/debug')
+    add_linkdirs(webrtc_obj_dir)
     add_links('webrtc')
     add_syslinks('dbus-1', 'glib-2.0', 'gobject-2.0', 'gmodule-2.0', 'gio-2.0', 'gbm')
     add_syslinks('xdo', 'xcb', 'X11', 'Xext', 'Xfixes', 'Xdamage', 'Xrandr', 'Xrender', 'Xau', 'Xdmcp', 'Xcomposite',
         'Xtst')
     add_syslinks('rt', 'atomic', 'GL', 'GLEW', 'drm')
 
-    add_deps('webrtc')
+    after_build(function(target)
+        os.run('scp %s doubleleft@10.10.10.133:/home/doubleleft/', target:targetfile())
+    end)
+
+    -- add_deps('webrtc')
 end)
 
 target('signal_server', function()
@@ -58,6 +62,10 @@ target('signal_server', function()
     add_includedirs('src')
 
     add_packages('boost_json', 'boost_url', 'boost_beast', 'spdlog', { configs = { shared = false } })
+
+    after_build(function(target)
+        os.run('scp %s doubleleft@10.10.10.133:/home/doubleleft/', target:targetfile())
+    end)
 end)
 
 target('webrtc', function()

@@ -10,10 +10,10 @@
 #include "api/video/video_frame.h"
 #include "api/video/video_sink_interface.h"
 #include "api/video/video_source_interface.h"
+#include "rtc_base/time_utils.h"
 
 #include "modules/desktop_capture/desktop_capture_options.h"
 #include "modules/desktop_capture/desktop_capturer.h"
-#include "rtc_base/time_utils.h"
 
 #include <libyuv/convert.h>
 #include <libyuv/video_common.h>
@@ -32,14 +32,12 @@ class ScreenCaptureImpl : public rtc::VideoSourceInterface<webrtc::VideoFrame>,
         : desktop_capturer_(nullptr), thread_(), sinks_()
     {
         auto opts = webrtc::DesktopCaptureOptions::CreateDefault();
-        /*
-        #ifdef __unix__
-                std::string display = std::getenv("DISPLAY");
-                logger::debug("display: {}", display);
-                auto xdisplay = webrtc::SharedXDisplay::Create(display);
-                opts.set_x_display(xdisplay);
-        #endif
-        */
+#ifdef __unix__
+        std::string display = std::getenv("DISPLAY");
+        logger::debug("display: {}", display);
+        auto xdisplay = webrtc::SharedXDisplay::CreateDefault();
+        opts.set_x_display(xdisplay);
+#endif
 
         if (kind == CaptureType::kScreen) {
             desktop_capturer_ =
@@ -174,3 +172,4 @@ ScreenCapturer::ScreenCapturer(Config conf)
 {
     logger::debug("ScreenCapturer created");
 }
+

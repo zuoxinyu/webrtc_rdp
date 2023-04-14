@@ -1,13 +1,14 @@
 #pragma once
 
+#include "capturer/camera_capturer.hh"
+#include "capturer/video_capturer.hh"
+#include "peer_client.hh"
+#include "signal_client.hh"
+#include "sink/video_renderer.hh"
+
 #include <memory>
 #include <string>
 #include <thread>
-
-#include "peer_client.hh"
-#include "signal_client.hh"
-#include "video_capturer.hh"
-#include "video_renderer.hh"
 
 #include <SDL2/SDL_events.h>
 
@@ -36,7 +37,8 @@ class MainWindow
     std::unique_ptr<std::thread> thread_;
     std::unique_ptr<SignalClient> cc_;
     rtc::scoped_refptr<PeerClient> pc_;
-    rtc::scoped_refptr<ScreenCapturer> video_src_ = nullptr;
+    rtc::scoped_refptr<CameraCapturer> local_video_src_ = nullptr;
+    rtc::scoped_refptr<ScreenCapturer> remote_video_src_ = nullptr;
     std::unique_ptr<VideoRenderer> local_renderer_ = nullptr;
     std::unique_ptr<VideoRenderer> remote_renderer_ = nullptr;
 };

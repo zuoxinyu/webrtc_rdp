@@ -63,12 +63,10 @@ struct PeerClient : public webrtc::PeerConnectionObserver,
     void deletePeerConnection();
     void createLocalTracks();
     void makeCall();
-    void addVideoSource(VideoSourcePtr);
+    void addLocalVideoSource(VideoSourcePtr);
+    void addRemoteVideoSource(VideoSourcePtr);
     void addLocalSinks(VideoSinkPtr);
     void addRemoteSinks(VideoSinkPtr);
-    void onRemoteOffer(const std::string &);
-    void onRemoteAnswer(const std::string &);
-    void onRemoteCandidate(const std::string &);
     void setSignalingObserver(SignalingObserver *ob)
     {
         signaling_observer_ = ob;
@@ -80,11 +78,15 @@ struct PeerClient : public webrtc::PeerConnectionObserver,
     bool sendBinaryMessage(const uint8_t *data, size_t size);
     std::optional<ChanMessage> recvMessage();
 
-  public:
+  private:
+    void onRemoteOffer(const std::string &);
+    void onRemoteAnswer(const std::string &);
+    void onRemoteCandidate(const std::string &);
+
+  public: // PeerObserver impl
     void OnSignal(MessageType, const std::string &offer) override;
 
-  public:
-    // PeerConnectionObserver impl
+  public: // PeerConnectionObserver impl
     void OnSignalingChange(
         webrtc::PeerConnectionInterface::SignalingState new_state) override{};
     void
@@ -103,21 +105,22 @@ struct PeerClient : public webrtc::PeerConnectionObserver,
         rtc::scoped_refptr<webrtc::DataChannelInterface> data_channel) override;
     void OnIceGatheringChange(
         webrtc::PeerConnectionInterface::IceGatheringState new_state) override;
+    void OnIceSelectedCandidatePairChanged(
+        const cricket::CandidatePairChangeEvent &) override;
 
-  public:
-    // CreateSessionDescriptionObserver impl
+  public: // CreateSessionDescriptionObserver impl
     void OnSuccess(webrtc::SessionDescriptionInterface *desc) override;
     void OnFailure(webrtc::RTCError error) override;
 
-  public:
-    // DataChannelInterface impl
+  public: // DataChannelInterface impl
     void OnStateChange() override {}
     void OnMessage(const webrtc::DataBuffer &) override;
     void OnBufferedAmountChange(uint64_t) override {}
 
   private:
     // external resources
-    VideoSourcePtr video_src_ = nullptr;
+    VideoSourcePtr local_video_src_ = nullptr;
+    VideoSourcePtr remote_video_src_ = nullptr;
     VideoSinkPtr local_sink_ = nullptr;
     VideoSinkPtr remote_sink_ = nullptr;
     SignalingObserver *signaling_observer_ = nullptr;

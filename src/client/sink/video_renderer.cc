@@ -69,9 +69,13 @@ std::unique_ptr<VideoRenderer> VideoRenderer::Create(Config conf)
 
 VideoRenderer::VideoRenderer(Config conf) : conf_(std::move(conf))
 {
-    window_ =
-        SDL_CreateWindow(conf_.name.c_str(), 0, 100, conf_.width, conf_.height,
-                         SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI);
+
+    uint32_t flags = SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI;
+    if (conf_.hide)
+        flags |= SDL_WINDOW_HIDDEN;
+
+    window_ = SDL_CreateWindow(conf_.name.c_str(), 0, 100, conf_.width,
+                               conf_.height, flags);
     renderer_ = SDL_CreateRenderer(window_, -1, SDL_RENDERER_ACCELERATED);
     texture_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_IYUV,
                                  SDL_TEXTUREACCESS_STREAMING, conf_.width,
@@ -134,7 +138,7 @@ VideoRenderer::~VideoRenderer()
     glDeleteTextures(1, &textures_[Y]);
 }
 
-webrtc::WindowId VideoRenderer::get_window_handle() const
+webrtc::WindowId VideoRenderer::get_native_window_handle() const
 {
     auto sdlid = SDL_GetWindowID(window_);
     SDL_SysWMinfo info;
@@ -306,10 +310,15 @@ void VideoRenderer::OnFrame(const webrtc::VideoFrame &frame)
     auto scaled = buf->Scale(conf_.width, conf_.height);
     auto yuv = scaled->GetI420();
     static int once = 0;
-    if (once < 1200 && once % 60 == 0) {
+    if (conf_.dump && once < 1200 && once % 60 == 0) {
         dump_frame(frame, once);
     }
     once++;
+
+    if (conf_.hide) {
+        SDL_ShowWindow(window_);
+        conf_.hide = false;
+    }
 
     if (conf_.use_opengl) {
         update_gl_textures(yuv->DataY(), yuv->DataU(), yuv->DataV());

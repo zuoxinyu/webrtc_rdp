@@ -10,7 +10,8 @@ class EventExecutor
     struct Event {
         SDL_Event native_ev;
     };
-    static auto create() -> std::unique_ptr<EventExecutor>;
+    using WindowHandle = void *;
+    static auto create(WindowHandle) -> std::unique_ptr<EventExecutor>;
 
   public:
     virtual ~EventExecutor() = default;
