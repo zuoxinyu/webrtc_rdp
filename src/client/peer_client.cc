@@ -178,11 +178,9 @@ void PeerClient::OnSignal(MessageType mt, const std::string &payload)
         onReady();
         break;
     case MessageType::kOffer:
-        is_caller_ = false;
         onRemoteOffer(payload);
         break;
     case MessageType::kAnswer:
-        assert(is_caller_);
         onRemoteAnswer(payload);
         break;
     case MessageType::kCandidate:
@@ -217,6 +215,8 @@ void PeerClient::onReady()
 void PeerClient::onRemoteOffer(const std::string &sdp)
 {
     logger::debug("got remote offer:\n{}", sdp);
+    is_caller_ = false;
+
     createPeerConnection();
     createLocalTracks();
     createDataChannel();
@@ -232,6 +232,7 @@ void PeerClient::onRemoteOffer(const std::string &sdp)
 
 void PeerClient::onRemoteAnswer(const std::string &sdp)
 {
+    assert(isCaller());
     logger::debug("got remote answer:\n{}", sdp);
     assert(pc_->signaling_state() == SignalingState::kHaveLocalOffer);
     webrtc::SdpParseError err;

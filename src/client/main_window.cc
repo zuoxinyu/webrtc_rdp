@@ -94,12 +94,13 @@ void MainWindow::connect(const Peer::Id &id) { cc_->startSession(id); }
 
 void MainWindow::disconnect() { cc_->stopSession(); }
 
-void MainWindow::write_chat_message(char *buf)
+void MainWindow::write_chat_message(const std::string &who, const char *buf)
 {
     if (chatbuf_[0]) {
         std::strcat(chatbuf_, "\n");
     }
-    pc_->postTextMessage(buf);
+    auto prefix = who + ":\n";
+    std::strcat(chatbuf_, prefix.c_str());
     std::strcat(chatbuf_, buf);
     chatbuf_updated_ = true;
 }
@@ -134,6 +135,8 @@ void MainWindow::run()
 
                 executor_->execute(ee);
             } else {
+                std::string text((const char *)msg->data, msg->size);
+                write_chat_message(cc_->peer().name, text.c_str());
             }
         }
 
@@ -202,6 +205,8 @@ void MainWindow::chat_window(mu_Context *ctx)
             submitted = 1;
         }
         if (submitted) {
+            write_chat_message(cc_->name(), buf);
+            pc_->postTextMessage(buf);
             buf[0] = '\0';
         }
 
@@ -221,13 +226,20 @@ void MainWindow::peers_window(mu_Context *ctx)
                 auto id = pair.second.id;
                 if (id == cc_->id()) {
                     mu_label(ctx, "me");
-                } else if (cc_->calling()) {
-                    mu_label(ctx, cc_->current() == id ? "o" : "-");
-                } else if (mu_button_ex(ctx, "", MU_ICON_CHECK, 0)) {
-                    connect(id);
+                } else if (!cc_->calling()) {
+                    if (mu_button_ex(ctx, "", MU_ICON_CHECK, 0)) {
+                        connect(id);
+                    }
+                } else {
+                    if (mu_button_ex(
+                            ctx, "", MU_ICON_CLOSE,
+                            id == cc_->current() ? 0 : MU_OPT_NOINTERACT)) {
+                        disconnect();
+                    }
                 }
             }
         }
+
         if (mu_header_ex(ctx, "Offline Peers", MU_OPT_EXPANDED)) {
             int ws[2] = {-80, -1};
             mu_layout_row(ctx, 2, ws, 30);
@@ -242,15 +254,7 @@ void MainWindow::peers_window(mu_Context *ctx)
         if (mu_button(ctx, "Exit")) {
             running_ = false;
         }
-        if (mu_button_ex(ctx, "Disconnect", 0,
-                         cc_->calling() ? MU_OPT_ALIGNCENTER
-                                        : MU_OPT_NOINTERACT)) {
-            disconnect();
-        }
-
         mu_end_window(ctx);
-    } else {
-        running_ = false;
     }
 }
 

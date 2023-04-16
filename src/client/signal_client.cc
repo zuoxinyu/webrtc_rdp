@@ -119,7 +119,7 @@ awaitable<void> SignalClient::waitMessage()
                 std::string payload(msg["payload"].get_string());
 
                 if (mt == MessageType::kOffer) {
-                    startSession(peer_id);
+                    current_peer_ = std::move(peer_id);
                 }
                 peer_observer_->OnSignal(mt, payload);
             }
@@ -195,7 +195,7 @@ awaitable<void> SignalClient::handlePendingMessages()
     while (!pending_messages_.empty()) {
         auto m = pending_messages_.front();
         pending_messages_.pop();
-        co_await sendMessage(current(), m.payload, m.mt);
+        co_await sendMessage(m.id, m.payload, m.mt);
     }
 };
 
@@ -240,18 +240,19 @@ const Peer::List SignalClient::offlinePeers() const
 // SignalingObserver
 void SignalClient::SendSignal(MessageType mt, const std::string &msg)
 {
-    pending_messages_.push({mt, msg});
+    pending_messages_.push({current(), mt, msg});
 }
 
 void SignalClient::stopSession()
 {
+    // bug: sync issues
     SendSignal(MessageType::kBye, "bye");
-    peer_observer_->OnSignal(MessageType::kLogout, "logout");
     current_peer_ = {};
+    peer_observer_->OnSignal(MessageType::kLogout, "logout");
 }
 
 void SignalClient::startSession(Peer::Id peer_id)
 {
-    peer_observer_->OnSignal(MessageType::kReady, "ready");
     current_peer_ = std::move(peer_id);
+    peer_observer_->OnSignal(MessageType::kReady, "ready");
 }

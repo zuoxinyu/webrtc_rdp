@@ -27,6 +27,7 @@ using boost::system::error_code;
 struct SignalClient : public SignalingObserver {
   public:
     struct PendingMessage {
+        Peer::Id id;
         MessageType mt;
         std::string payload;
     };

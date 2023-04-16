@@ -38,7 +38,7 @@ class MainWindow
     void logout();
     void connect(const Peer::Id &);
     void disconnect();
-    void write_chat_message(char *buf);
+    void write_chat_message(const std::string &who, const char *buf);
 
   private:
     std::string title_;
