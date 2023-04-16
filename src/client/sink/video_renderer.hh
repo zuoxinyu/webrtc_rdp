@@ -1,5 +1,7 @@
 #pragma once
 
+#include "video_sink.hh"
+
 #include <boost/lockfree/policies.hpp>
 #include <boost/lockfree/queue.hpp>
 #include <boost/thread/sync_queue.hpp>
@@ -12,7 +14,7 @@
 #include "modules/desktop_capture/desktop_capture_types.h"
 #include "rtc_base/ref_count.h"
 
-struct VideoRenderer : public rtc::VideoSinkInterface<webrtc::VideoFrame> {
+struct VideoRenderer : VideoSink {
   public:
     struct Config {
         std::string name;
@@ -24,7 +26,7 @@ struct VideoRenderer : public rtc::VideoSinkInterface<webrtc::VideoFrame> {
     };
 
   public:
-    static std::unique_ptr<VideoRenderer> Create(Config conf);
+    static rtc::scoped_refptr<VideoRenderer> Create(Config conf);
 
   public:
     explicit VideoRenderer(Config conf, SDL_Window *);
@@ -49,6 +51,9 @@ struct VideoRenderer : public rtc::VideoSinkInterface<webrtc::VideoFrame> {
   public:
     // impl VideoSinkInterface
     void OnFrame(const webrtc::VideoFrame &frame) override;
+    // impl VideoSink
+    void Start() override;
+    void Stop() override;
 
   private:
     // resources
@@ -63,6 +68,7 @@ struct VideoRenderer : public rtc::VideoSinkInterface<webrtc::VideoFrame> {
     // properties
     Config conf_;
     // states
+    bool running_ = false;
 
     boost::sync_queue<rtc::scoped_refptr<webrtc::VideoFrameBuffer>>
         frame_queue_;

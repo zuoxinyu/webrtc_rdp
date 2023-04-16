@@ -1,6 +1,8 @@
 #pragma once
 
 #include "callbacks.hh"
+#include "sink/video_sink.hh"
+#include "source/video_source.hh"
 
 #include <memory>
 
@@ -12,15 +14,14 @@
 #include "api/set_remote_description_observer_interface.h"
 #include "rtc_base/ref_counted_object.h"
 
-struct PeerClient : public webrtc::PeerConnectionObserver,
-                    public webrtc::CreateSessionDescriptionObserver,
-                    public webrtc::DataChannelObserver,
+struct PeerClient : private webrtc::PeerConnectionObserver,
+                    private webrtc::DataChannelObserver,
                     public PeerObserver {
 
   public:
     struct ChanMessage;
-    using VideoSourcePtr = webrtc::VideoTrackSourceInterface *;
-    using VideoSinkPtr = rtc::VideoSinkInterface<webrtc::VideoFrame> *;
+    using VideoSourcePtr = rtc::scoped_refptr<VideoSource>;
+    using VideoSinkPtr = rtc::scoped_refptr<VideoSink>;
     using MessageQueue = std::queue<ChanMessage>;
 
     struct ChanMessage {
@@ -57,12 +58,9 @@ struct PeerClient : public webrtc::PeerConnectionObserver,
 
   public:
     PeerClient();
-    ~PeerClient() override = default;
+    ~PeerClient() override;
 
-    bool createPeerConnection();
-    void deletePeerConnection();
-    void createLocalTracks();
-    void makeCall();
+    // external resources about
     void addLocalVideoSource(VideoSourcePtr);
     void addRemoteVideoSource(VideoSourcePtr);
     void addLocalSinks(VideoSinkPtr);
@@ -71,48 +69,51 @@ struct PeerClient : public webrtc::PeerConnectionObserver,
     {
         signaling_observer_ = ob;
     }
+    // states
     bool isCaller() const { return is_caller_; }
-
     // channel messaging, TODO: abastract interface
-    bool sendTextMessage(const std::string &text);
-    bool sendBinaryMessage(const uint8_t *data, size_t size);
-    std::optional<ChanMessage> recvMessage();
+    bool postTextMessage(const std::string &text);
+    bool postBinaryMessage(const uint8_t *data, size_t size);
+    std::optional<ChanMessage> pollRemoteMessage();
 
   private:
+    // internal resources about
+    bool createPeerConnection();
+    void deletePeerConnection();
+    void createTransceivers();
+    void createLocalTracks();
+    void createDataChannel();
+
+    // signaling about
+    void onReady();
+    void onDisconnect();
     void onRemoteOffer(const std::string &);
     void onRemoteAnswer(const std::string &);
     void onRemoteCandidate(const std::string &);
+    void onRemoteBye();
 
   public: // PeerObserver impl
     void OnSignal(MessageType, const std::string &offer) override;
 
-  public: // PeerConnectionObserver impl
+  private: // PeerConnectionObserver impl
     void OnSignalingChange(
-        webrtc::PeerConnectionInterface::SignalingState new_state) override{};
-    void
-    OnIceCandidate(const webrtc::IceCandidateInterface *candidate) override;
-    void OnAddTrack(
-        rtc::scoped_refptr<webrtc::RtpReceiverInterface> receiver,
-        const std::vector<rtc::scoped_refptr<webrtc::MediaStreamInterface>>
-            &streams) override;
+        webrtc::PeerConnectionInterface::SignalingState) override{};
+    void OnIceCandidate(const webrtc::IceCandidateInterface *) override;
+    void OnTrack(rtc::scoped_refptr<webrtc::RtpTransceiverInterface>) override;
     void OnRemoveTrack(
-        rtc::scoped_refptr<webrtc::RtpReceiverInterface> receiver) override;
+        rtc::scoped_refptr<webrtc::RtpReceiverInterface>) override;
     void OnAddStream(
-        rtc::scoped_refptr<webrtc::MediaStreamInterface> stream) override;
+        rtc::scoped_refptr<webrtc::MediaStreamInterface>) override{};
     void OnRemoveStream(
-        rtc::scoped_refptr<webrtc::MediaStreamInterface> stream) override;
+        rtc::scoped_refptr<webrtc::MediaStreamInterface>) override{};
     void OnDataChannel(
-        rtc::scoped_refptr<webrtc::DataChannelInterface> data_channel) override;
+        rtc::scoped_refptr<webrtc::DataChannelInterface>) override;
     void OnIceGatheringChange(
-        webrtc::PeerConnectionInterface::IceGatheringState new_state) override;
+        webrtc::PeerConnectionInterface::IceGatheringState) override;
     void OnIceSelectedCandidatePairChanged(
         const cricket::CandidatePairChangeEvent &) override;
 
-  public: // CreateSessionDescriptionObserver impl
-    void OnSuccess(webrtc::SessionDescriptionInterface *desc) override;
-    void OnFailure(webrtc::RTCError error) override;
-
-  public: // DataChannelInterface impl
+  private: // DataChannelInterface impl
     void OnStateChange() override {}
     void OnMessage(const webrtc::DataBuffer &) override;
     void OnBufferedAmountChange(uint64_t) override {}

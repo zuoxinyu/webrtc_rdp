@@ -41,7 +41,7 @@ struct SignalClient : public SignalingObserver {
     };
 
     static constexpr Config kDefaultConfig{
-        "myname",
+        "user",
         "127.0.0.1",
         8888,
         false,
@@ -61,30 +61,35 @@ struct SignalClient : public SignalingObserver {
     ~SignalClient();
 
   public:
-    awaitable<void> signin(std::string server, int port);
-    awaitable<void> logout();
-    awaitable<void> sendMessage(Peer::Id id, std::string offer, MessageType mt);
-    awaitable<void> waitMessage();
-    awaitable<void> handlePendingMessages();
-
-  public:
+    void setPeerObserver(PeerObserver *observer) { peer_observer_ = observer; }
+    void login(const std::string &server, int port);
+    void logout();
     bool online() const { return me_.online; }
-    const Peer &me() const { return me_; }
-    const Peer::Id currentPeer() const { return current_peer_; }
-    void setCurrentPeer(Peer::Id peer_id)
-    {
-        current_peer_ = std::move(peer_id);
-    }
+    bool calling() const { return current_peer_.has_value(); }
+    const std::string id() const { return me_.id; }
+    const std::string name() const { return me_.name; }
+    void setName(std::string name) { me_.name = std::move(name); }
+    const Peer::Id current() const { return current_peer_.value(); }
+    const Peer &peer() const { return peers_.at(current()); }
+    void startSession(Peer::Id peer_id);
+    void stopSession();
     const Peer::List &peers() const { return peers_; }
     const Peer::List onlinePeers() const;
     const Peer::List offlinePeers() const;
-    void setPeerObserver(PeerObserver *observer) { peer_observer_ = observer; }
 
   public:
     void SendSignal(MessageType, const std::string &) override;
 
   private:
+    awaitable<void> signin(std::string server, int port);
+    awaitable<void> signout();
+    awaitable<void> sendMessage(Peer::Id id, std::string offer, MessageType mt);
+    awaitable<void> waitMessage();
+    awaitable<void> handlePendingMessages();
+
+  private:
     void setPeers(const json::value &v);
+    void doLogout();
 
   private:
     // TODO: dedicate thread
@@ -99,7 +104,7 @@ struct SignalClient : public SignalingObserver {
     // states
     Config conf_;
     Peer::List peers_;
-    Peer::Id current_peer_ = "-1";
+    std::optional<Peer::Id> current_peer_;
     Peer me_ = {kDefaultConfig.name, "-1", false};
     std::queue<PendingMessage> pending_messages_;
 };

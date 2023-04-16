@@ -22,9 +22,8 @@ class CameraCapturerImpl : public rtc::VideoSourceInterface<webrtc::VideoFrame>
         assert(ndev > 0);
         device_info->GetDeviceName(0, device_name, 256, device_uniq, 256);
         vcm_ = webrtc::VideoCaptureFactory::Create(device_uniq);
-
-        start();
     }
+    ~CameraCapturerImpl() override = default;
 
   public: // impl VideoSourceInterface
     void AddOrUpdateSink(rtc::VideoSinkInterface<webrtc::VideoFrame> *sink,
@@ -41,6 +40,7 @@ class CameraCapturerImpl : public rtc::VideoSourceInterface<webrtc::VideoFrame>
     void RequestRefreshFrame() override{};
 
     bool running() const { return running_; }
+
     void start()
     {
         webrtc::VideoCaptureCapability cap;
@@ -50,6 +50,8 @@ class CameraCapturerImpl : public rtc::VideoSourceInterface<webrtc::VideoFrame>
         cap.maxFPS = conf_.fps;
         vcm_->StartCapture(cap);
     }
+
+    void stop() { vcm_->StopCapture(); }
 
   private:
     rtc::scoped_refptr<webrtc::VideoCaptureModule> vcm_;
@@ -68,8 +70,19 @@ size_t CameraCapturer::GetDeviceNum()
     return device_info->NumberOfDevices();
 }
 
-CameraCapturer::CameraCapturer(CameraCapturer::Config conf)
-    : webrtc::VideoTrackSource(false)
+CameraCapturer::CameraCapturer(CameraCapturer::Config conf) : VideoSource(false)
 {
     source_ = std::make_unique<CameraCapturerImpl>(conf);
+}
+
+void CameraCapturer::Start()
+{
+    SetState(SourceState::kLive);
+    static_cast<CameraCapturerImpl *>(source_.get())->start();
+}
+
+void CameraCapturer::Stop()
+{
+    SetState(SourceState::kEnded);
+    static_cast<CameraCapturerImpl *>(source_.get())->stop();
 }

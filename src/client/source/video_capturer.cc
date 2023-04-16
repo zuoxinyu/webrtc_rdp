@@ -57,21 +57,28 @@ class ScreenCaptureImpl : public rtc::VideoSourceInterface<webrtc::VideoFrame>,
         for (auto id : conf.exlude_window_id) {
             desktop_capturer_->SetExcludedWindow(id);
         }
+        // Start should only be called once
+        desktop_capturer_->Start(this);
+    }
 
-        start();
+    ~ScreenCaptureImpl() override
+    {
+        if (running_)
+            stop();
     }
 
     bool running() const { return running_; }
 
     void start()
     {
+        assert(!running_);
         running_ = true;
         thread_ = std::thread(&ScreenCaptureImpl::capture_thread, this);
-        desktop_capturer_->Start(this);
     }
 
     void stop()
     {
+        assert(running_);
         running_ = false;
         thread_.join();
     }
@@ -105,7 +112,7 @@ class ScreenCaptureImpl : public rtc::VideoSourceInterface<webrtc::VideoFrame>,
             [sink](const SinkPair &pair) { return pair.sink == sink; }));
     };
 
-    void RequestRefreshFrame() override { desktop_capturer_->CaptureFrame(); };
+    void RequestRefreshFrame() override{};
 
   public: // impl DesktopCapturer::Callback
     void OnCaptureResult(webrtc::DesktopCapturer::Result result,
@@ -156,7 +163,7 @@ class ScreenCaptureImpl : public rtc::VideoSourceInterface<webrtc::VideoFrame>,
     std::unique_ptr<webrtc::DesktopCapturer> desktop_capturer_;
     std::thread thread_;
     std::vector<SinkPair> sinks_;
-    bool running_ = false;
+    std::atomic<bool> running_ = false;
 };
 
 rtc::scoped_refptr<ScreenCapturer> ScreenCapturer::Create(Config conf)
@@ -165,11 +172,23 @@ rtc::scoped_refptr<ScreenCapturer> ScreenCapturer::Create(Config conf)
 }
 
 ScreenCapturer::ScreenCapturer(Config conf)
-    : webrtc::VideoTrackSource(false),
-      source_(std::make_unique<ScreenCaptureImpl>(conf,
-                                                  ScreenCaptureImpl::kScreen)),
-      conf_(std::move(conf))
+    : VideoSource(false), conf_(std::move(conf))
 {
+    source_ =
+        std::make_unique<ScreenCaptureImpl>(conf_, ScreenCaptureImpl::kScreen);
     logger::debug("ScreenCapturer created");
 }
 
+ScreenCapturer::~ScreenCapturer() = default;
+
+void ScreenCapturer::Start()
+{
+    SetState(SourceState::kLive);
+    static_cast<ScreenCaptureImpl *>(source_.get())->start();
+}
+
+void ScreenCapturer::Stop()
+{
+    SetState(SourceState::kEnded);
+    static_cast<ScreenCaptureImpl *>(source_.get())->stop();
+}

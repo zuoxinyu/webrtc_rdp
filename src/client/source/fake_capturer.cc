@@ -99,8 +99,7 @@ size_t FakeCapturer::GetDeviceNum()
     return device_info->NumberOfDevices();
 }
 
-FakeCapturer::FakeCapturer(FakeCapturer::Config conf)
-    : webrtc::VideoTrackSource(false)
+FakeCapturer::FakeCapturer(FakeCapturer::Config conf) : VideoSource(false)
 {
     source_ = std::make_unique<FakeCapturerImpl>(conf);
 }

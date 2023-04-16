@@ -58,18 +58,18 @@ static const float tex_buffer[] = {
     1.0, 0.0, // rb
 };
 
-std::unique_ptr<VideoRenderer> VideoRenderer::Create(Config conf)
+rtc::scoped_refptr<VideoRenderer> VideoRenderer::Create(Config conf)
 {
     if (conf.use_opengl) {
-        return std::make_unique<VideoRenderer>(std::move(conf), nullptr);
+        return rtc::make_ref_counted<VideoRenderer>(std::move(conf), nullptr);
     } else {
-        return std::make_unique<VideoRenderer>(std::move(conf));
+        return rtc::make_ref_counted<VideoRenderer>(std::move(conf));
     }
 }
 
 VideoRenderer::VideoRenderer(Config conf) : conf_(std::move(conf))
 {
-
+    running_ = !conf.hide;
     uint32_t flags = SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI;
     if (conf_.hide)
         flags |= SDL_WINDOW_HIDDEN;
@@ -88,6 +88,7 @@ VideoRenderer::VideoRenderer(Config conf) : conf_(std::move(conf))
 VideoRenderer::VideoRenderer(Config conf, SDL_Window *win)
     : window_(win), conf_(std::move(conf))
 {
+    running_ = !conf.hide;
     window_ =
         SDL_CreateWindow(conf_.name.c_str(), 0, 100, conf_.width, conf_.height,
                          SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI);
@@ -128,14 +129,34 @@ VideoRenderer::VideoRenderer(Config conf, SDL_Window *win)
 
 VideoRenderer::~VideoRenderer()
 {
-    glDeleteProgram(program_);
+    if (conf_.use_opengl) {
+        glDeleteProgram(program_);
 
-    glDeleteBuffers(1, &pos_buffer_);
-    glDeleteBuffers(1, &tex_buffer_);
+        glDeleteBuffers(1, &pos_buffer_);
+        glDeleteBuffers(1, &tex_buffer_);
 
-    glDeleteTextures(1, &textures_[V]);
-    glDeleteTextures(1, &textures_[U]);
-    glDeleteTextures(1, &textures_[Y]);
+        glDeleteTextures(1, &textures_[V]);
+        glDeleteTextures(1, &textures_[U]);
+        glDeleteTextures(1, &textures_[Y]);
+
+        SDL_GL_DeleteContext(glctx_);
+    } else {
+        SDL_DestroyTexture(texture_);
+        SDL_DestroyRenderer(renderer_);
+    }
+    SDL_DestroyWindow(window_);
+}
+
+void VideoRenderer::Start()
+{
+    running_ = true;
+    SDL_ShowWindow(window_);
+}
+
+void VideoRenderer::Stop()
+{
+    running_ = false;
+    SDL_HideWindow(window_);
 }
 
 webrtc::WindowId VideoRenderer::get_native_window_handle() const
@@ -306,7 +327,10 @@ void VideoRenderer::update_gl_textures(const void *ydata, const void *udata,
 // running on capture thread (local) or (remote)?
 void VideoRenderer::OnFrame(const webrtc::VideoFrame &frame)
 {
+    if (!running_)
+        return;
     auto buf = frame.video_frame_buffer();
+    // TODO: keep ratio
     auto scaled = buf->Scale(conf_.width, conf_.height);
     auto yuv = scaled->GetI420();
     static int once = 0;

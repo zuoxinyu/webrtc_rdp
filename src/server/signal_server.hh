@@ -18,7 +18,7 @@ using request = beast::http::request<beast::http::string_body>;
 using asio::detached;
 using asio::use_awaitable;
 
-struct ChatServer {
+struct SignalServer {
   public:
     struct PeerState;
     using PeerState = struct PeerState;
@@ -45,9 +45,9 @@ struct ChatServer {
     };
 
   public:
-    ChatServer(asio::io_context &ctx, const std::string &host = "localhost",
-               int port = 8888);
-    ~ChatServer();
+    SignalServer(asio::io_context &ctx, const std::string &host = "localhost",
+                 int port = 8888);
+    ~SignalServer();
 
   public:
     asio::awaitable<void> run();
@@ -57,11 +57,11 @@ struct ChatServer {
         -> asio::awaitable<void>;
     auto handle_websocket_session(std::shared_ptr<wstream>, request)
         -> asio::awaitable<void>;
-    auto handle_request(request &&) -> http::message_generator;
-    auto handle_sign_in(request &&) -> http::message_generator;
-    auto handle_sign_out(request &&) -> http::message_generator;
-    auto handle_send_to(request &&) -> http::message_generator;
-    auto handle_wait(request &&) -> http::message_generator;
+    auto handle_request(request &&) -> response;
+    auto handle_sign_in(request &&) -> response;
+    auto handle_sign_out(request &&) -> response;
+    auto handle_send_to(request &&) -> response;
+    auto handle_wait(request &&) -> response;
 
     auto peers_json() const -> json::array;
 

@@ -3,112 +3,210 @@
 
 #include <cstdlib>
 #include <cstring>
+#include <thread>
 
 extern "C" {
 #include "microui.h"
 #include "renderer.h"
 #include <SDL2/SDL.h>
+#include <SDL2/SDL_video.h>
 }
 
-constexpr int kWidth = 1920;
-constexpr int kHeight = 1200;
-static const char *defaultHost = nullptr;
+static constexpr auto kWidth = 1920;
+static constexpr auto kHeight = 1200;
+static const VideoRenderer::Config local_opts = {.name = "local camera video",
+                                                 .width = 600,
+                                                 .height = 400,
+                                                 .use_opengl = false,
+                                                 .dump = false,
+                                                 .hide = true};
+static const VideoRenderer::Config remote_opts = {.name =
+                                                      "remote desktop video",
+                                                  .width = kWidth,
+                                                  .height = kHeight,
+                                                  .use_opengl = false,
+                                                  .dump = false,
+                                                  .hide = true};
 
-MainWindow::MainWindow(mu_Context *ctx, const std::string &title)
-    : title_(title), io_ctx_(), ctx_(ctx),
-      cc_(std::make_unique<SignalClient>(io_ctx_, title)),
-      pc_(rtc::make_ref_counted<PeerClient>())
+static char hostbuf[16] = "127.0.0.1";
+static char portbuf[8] = "8888";
+static char namebuf[16] = "user";
+
+void parseEnvs()
 {
-    defaultHost = ::getenv("SIGNAL_DEFAULT_HOST");
-    VideoRenderer::Config local_opts = {.name = "local camera video",
-                                        .width = 600,
-                                        .height = 400,
-                                        .use_opengl = false,
-                                        .dump = false,
-                                        .hide = false};
-    VideoRenderer::Config remote_opts = {.name = "remote desktop video",
-                                         .width = kWidth,
-                                         .height = kHeight,
-                                         .use_opengl = false,
-                                         .dump = false,
-                                         .hide = true};
+    if (auto name = ::getenv("SIGNAL_DEFAULT_NAME")) {
+        std::strcpy(namebuf, name);
+    }
+    if (auto host = ::getenv("SIGNAL_DEFAULT_HOST")) {
+        std::strcpy(hostbuf, host);
+    }
+    if (auto port = ::getenv("SIGNAL_DEFAULT_PORT")) {
+        std::strcpy(portbuf, port);
+    }
+}
+
+MainWindow::MainWindow(mu_Context *ctx, int argc, char *argv[])
+    : ioctx_(), ctx_(ctx)
+{
+    parseEnvs();
+    /* absl::ParseCommandLine(argc, argv); */
+
+    auto_login_ = argc > 1 && argv[1];
+
+    pc_ = make_unique<PeerClient>();
+    cc_ = std::make_unique<SignalClient>(ioctx_);
     local_renderer_ = VideoRenderer::Create(local_opts);
     remote_renderer_ = VideoRenderer::Create(remote_opts);
     remote_video_src_ = ScreenCapturer::Create({});
 
+    executor_ = EventExecutor::create(remote_renderer_->get_window());
+
     pc_->setSignalingObserver(cc_.get());
     cc_->setPeerObserver(pc_.get());
-    if (pc_->createPeerConnection()) {
-        pc_->addRemoteVideoSource(remote_video_src_.get());
-        pc_->addRemoteSinks(remote_renderer_.get());
-        if (CameraCapturer::GetDeviceNum() > 0) {
-            local_video_src_ = CameraCapturer::Create(
-                {.width = 600, .height = 400, .fps = 30});
-            pc_->addLocalVideoSource(local_video_src_.get());
-            pc_->addLocalSinks(local_renderer_.get());
-        }
-        pc_->createLocalTracks();
+    pc_->addRemoteVideoSource(remote_video_src_);
+    pc_->addRemoteSinks(remote_renderer_);
+    if (CameraCapturer::GetDeviceNum() > 0) {
+        local_video_src_ =
+            CameraCapturer::Create({.width = 600, .height = 400, .fps = 30});
+        pc_->addLocalVideoSource(local_video_src_);
+        pc_->addLocalSinks(local_renderer_);
     }
+}
+
+void MainWindow::login()
+{
+    auto_login_ = false;
+
+    auto port = std::atoi(portbuf);
+    auto host = std::string{hostbuf};
+
+    cc_->setName(namebuf);
+    cc_->login(host, port);
+}
+
+void MainWindow::logout()
+{
+    disconnect();
+    cc_->logout();
+}
+
+void MainWindow::connect(const Peer::Id &id) { cc_->startSession(id); }
+
+void MainWindow::disconnect() { cc_->stopSession(); }
+
+void MainWindow::write_chat_message(char *buf)
+{
+    if (chatbuf_[0]) {
+        std::strcat(chatbuf_, "\n");
+    }
+    pc_->postTextMessage(buf);
+    std::strcat(chatbuf_, buf);
+    chatbuf_updated_ = true;
 }
 
 void MainWindow::run()
 {
-    SDL_Window *main_win = r_get_window();
-    SDL_Window *remote_win = remote_renderer_->get_window();
-    SDL_Window *local_win = local_renderer_->get_window();
+    running_ = true;
 
-    auto executor = EventExecutor::create(remote_win);
+    auto is_main_event = [](SDL_Event &e) {
+        return e.window.windowID == SDL_GetWindowID(r_get_window());
+    };
+    auto is_remote_event = [this](SDL_Event &e) {
+        return remote_renderer_ &&
+               e.window.windowID ==
+                   SDL_GetWindowID(remote_renderer_->get_window());
+    };
 
-    auto main_wid = SDL_GetWindowID(main_win);
-    auto local_wid = SDL_GetWindowID(local_win);
-    auto remote_wid = SDL_GetWindowID(remote_win);
+    SDL_Event e;
+    EventExecutor::Event ee;
+    std::optional<PeerClient::ChanMessage> msg;
 
-    while (true) {
-        if (io_ctx_.stopped()) {
-            io_ctx_.restart();
+    while (running_) {
+        ioctx_.restart();
+        while (!ioctx_.stopped() && ioctx_.poll()) {
+            ;
         }
-        io_ctx_.poll();
 
-        SDL_Event e, re;
-        EventExecutor::Event ee;
-        std::optional<PeerClient::ChanMessage> msg = pc_->recvMessage();
-        if (msg.has_value()) {
-            re = *reinterpret_cast<SDL_Event *>(
-                const_cast<uint8_t *>(msg.value().data));
+        while (pc_ && (msg = pc_->pollRemoteMessage())) {
+            if (msg->binary) {
+                ee.native_ev = *reinterpret_cast<SDL_Event *>(
+                    const_cast<uint8_t *>(msg.value().data));
 
-            re.window.windowID = main_wid;
-            ee.native_ev = re;
-            executor->execute(ee);
+                executor_->execute(ee);
+            } else {
+            }
         }
 
         while (SDL_PollEvent(&e)) {
             if (e.type == SDL_QUIT) {
-                ::exit(0);
+                running_ = false;
+                goto Exit;
             }
 
-            if (e.window.windowID == main_wid) {
+            if (is_main_event(e)) {
                 handle_main_event(e);
-            } else if (e.window.windowID == remote_wid) {
+            } else if (is_remote_event(e)) {
                 handle_remote_event(e);
             }
         }
 
-        render_windows(ctx_);
+        process_mu_windows();
 
-        handle_mu_events();
+        process_mu_commands();
+
+        ::usleep(12000);
     }
+Exit:;
 }
 
-void MainWindow::render_windows(mu_Context *ctx)
+void MainWindow::process_mu_windows()
 {
-    mu_begin(ctx);
-    if (cc_->online()) {
-        peers_window(ctx);
+    mu_begin(ctx_);
+    if (cc_ && cc_->online()) {
+        peers_window(ctx_);
     } else {
-        login_window(ctx);
+        login_window(ctx_);
+    }
+    if (cc_->calling()) {
+        chat_window(ctx_);
     }
 
-    mu_end(ctx);
+    mu_end(ctx_);
+}
+
+void MainWindow::chat_window(mu_Context *ctx)
+{
+    std::string title = "Chat vs " + cc_->peer().name;
+
+    if (mu_begin_window(ctx, title.c_str(), mu_rect(400, 300, 600, 400))) {
+        mu_layout_row(ctx, 1, (int[]){-1}, -25);
+        mu_begin_panel(ctx, "Log Output");
+        mu_Container *panel = mu_get_current_container(ctx);
+        mu_layout_row(ctx, 1, (int[]){-1}, -1);
+        mu_text(ctx, chatbuf_);
+        mu_end_panel(ctx);
+        if (chatbuf_updated_) {
+            panel->scroll.y = panel->content_size.y;
+            chatbuf_updated_ = false;
+        }
+
+        /* input textbox + submit button */
+        static char buf[128];
+        int submitted = 0;
+        mu_layout_row(ctx, 2, (int[]){-70, -1}, 0);
+        if (mu_textbox(ctx, buf, sizeof(buf)) & MU_RES_SUBMIT) {
+            mu_set_focus(ctx, ctx->last_id);
+            submitted = 1;
+        }
+        if (mu_button(ctx, "Send")) {
+            submitted = 1;
+        }
+        if (submitted) {
+            buf[0] = '\0';
+        }
+
+        mu_end_window(ctx);
+    }
 }
 
 void MainWindow::peers_window(mu_Context *ctx)
@@ -117,14 +215,16 @@ void MainWindow::peers_window(mu_Context *ctx)
         if (mu_header_ex(ctx, "Online Peers", MU_OPT_EXPANDED)) {
             int ws[3] = {-80, -40, -1};
             mu_layout_row(ctx, 3, ws, 30);
-            for (auto &pair : cc_->peers()) {
+            for (auto &pair : cc_->onlinePeers()) {
                 mu_label(ctx, pair.second.name.c_str());
                 mu_label(ctx, pair.second.id.c_str());
-                std::string btn_id = pair.second.id;
-                if (mu_button(ctx, btn_id.c_str())) {
-                    // start calling
-                    cc_->setCurrentPeer(pair.second.id);
-                    pc_->makeCall();
+                auto id = pair.second.id;
+                if (id == cc_->id()) {
+                    mu_label(ctx, "me");
+                } else if (cc_->calling()) {
+                    mu_label(ctx, cc_->current() == id ? "o" : "-");
+                } else if (mu_button_ex(ctx, "", MU_ICON_CHECK, 0)) {
+                    connect(id);
                 }
             }
         }
@@ -136,9 +236,21 @@ void MainWindow::peers_window(mu_Context *ctx)
                 mu_label(ctx, pair.second.id.c_str());
             }
         }
+
+        int bws[2] = {60, 60};
+        mu_layout_row(ctx, 2, bws, 25);
+        if (mu_button(ctx, "Exit")) {
+            running_ = false;
+        }
+        if (mu_button_ex(ctx, "Disconnect", 0,
+                         cc_->calling() ? MU_OPT_ALIGNCENTER
+                                        : MU_OPT_NOINTERACT)) {
+            disconnect();
+        }
+
         mu_end_window(ctx);
     } else {
-        ::exit(0);
+        running_ = false;
     }
 }
 
@@ -146,13 +258,14 @@ void MainWindow::login_window(mu_Context *ctx)
 {
     if (mu_begin_window(ctx, "Login", mu_rect(0, 40, 300, 200))) {
         int ws[2] = {-240, -1};
-        mu_layout_row(ctx, 2, ws, 25);
         int submit = 0;
-        static char hostbuf[16] = "127.0.0.1";
-        static char portbuf[8] = "8888";
-        if (defaultHost) {
-            ::strcpy(hostbuf, defaultHost);
+        mu_layout_row(ctx, 2, ws, 25);
+        mu_text(ctx, "Name:");
+        if (mu_textbox(ctx, namebuf, sizeof(namebuf)) & MU_RES_SUBMIT) {
+            mu_set_focus(ctx, ctx->last_id);
+            submit = 1;
         }
+        mu_layout_row(ctx, 2, ws, 25);
         mu_text(ctx, "Host:");
         if (mu_textbox(ctx, hostbuf, sizeof(hostbuf)) & MU_RES_SUBMIT) {
             mu_set_focus(ctx, ctx->last_id);
@@ -164,14 +277,19 @@ void MainWindow::login_window(mu_Context *ctx)
             mu_set_focus(ctx, ctx->last_id);
             submit = 1;
         }
+
+        int bws[2] = {60, 60};
+        mu_layout_row(ctx, 2, bws, 25);
         if (mu_button(ctx, "Login")) {
             submit = 1;
         }
 
-        if (submit) {
-            int port = std::atoi(portbuf);
-            std::string host{hostbuf};
-            co_spawn(io_ctx_, cc_->signin(host, port), detached);
+        if (mu_button(ctx, "Exit")) {
+            running_ = false;
+        }
+
+        if (submit || auto_login_) {
+            login();
         }
 
         mu_end_window(ctx);
@@ -181,13 +299,10 @@ void MainWindow::login_window(mu_Context *ctx)
 void MainWindow::handle_main_event(const SDL_Event &e)
 {
     switch (e.type) {
-    case SDL_QUIT:
-        ::exit(EXIT_SUCCESS);
-        break;
     case SDL_WINDOWEVENT:
         switch (e.window.type) {
         case SDL_WINDOWEVENT_CLOSE:
-            SDL_DestroyWindow(SDL_GetWindowFromID(e.window.windowID));
+            running_ = false;
             break;
         }
         break;
@@ -227,10 +342,8 @@ void MainWindow::handle_main_event(const SDL_Event &e)
     }
 }
 
-void MainWindow::handle_mu_events()
+void MainWindow::process_mu_commands()
 {
-
-    /* render */
     r_clear(mu_color(bg[0], bg[1], bg[2], 255));
     mu_Command *cmd = nullptr;
     while (mu_next_command(ctx_, &cmd)) {
@@ -250,12 +363,11 @@ void MainWindow::handle_mu_events()
         }
     }
     r_present();
-    /* renderer_->update_frame(); */
 }
 
 void MainWindow::handle_remote_event(const SDL_Event &e)
 {
     SDL_Event ev = e;
     // TODO: handle failure
-    pc_->sendBinaryMessage(reinterpret_cast<const uint8_t *>(&ev), sizeof(ev));
+    pc_->postBinaryMessage(reinterpret_cast<const uint8_t *>(&ev), sizeof(ev));
 }

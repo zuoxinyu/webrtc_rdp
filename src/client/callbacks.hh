@@ -11,6 +11,7 @@ enum class MessageType {
     kAnswer,
     kCandidate,
     kBye,
+    kLogout,
 };
 
 static inline MessageType MessageTypeFromString(const std::string &s)
@@ -25,6 +26,8 @@ static inline MessageType MessageTypeFromString(const std::string &s)
         return MessageType::kCandidate;
     if (s == "bye")
         return MessageType::kBye;
+    if (s == "logout")
+        return MessageType::kLogout;
 
     return MessageType::kUnknown;
 }
@@ -44,6 +47,8 @@ static inline std::string MessageTypeToString(MessageType v)
         return "candidate";
     case MessageType::kBye:
         return "bye";
+    case MessageType::kLogout:
+        return "logout";
     }
 }
 

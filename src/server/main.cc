@@ -1,4 +1,4 @@
-#include "chat_server.hh"
+#include "signal_server.hh"
 
 #include <boost/asio.hpp>
 #include <boost/asio/co_spawn.hpp>
@@ -16,7 +16,7 @@ int main(int argc, char *argv[])
         port = atoi(argv[2]);
     }
 
-    ChatServer server(ioc, host, port);
+    SignalServer server(ioc, host, port);
     boost::asio::co_spawn(ioc, server.run(), boost::asio::detached);
 
     ioc.run();

@@ -1,6 +1,9 @@
 #include "peer_client.hh"
 #include "logger.hh"
 
+#include <memory>
+#include <utility>
+
 #include "api/audio_codecs/builtin_audio_decoder_factory.h"
 #include "api/audio_codecs/builtin_audio_encoder_factory.h"
 #include "api/audio_options.h"
@@ -16,16 +19,15 @@
 static const std::string kDefaultSTUNServer = "stun:stun1.l.google.com:19302";
 static const std::string kAudioLabel = "audio_label";
 static const std::string kLocalVideoLabel = "local_video_label";
-static const std::string kRemoteVideoLabel = "local_video_label";
+static const std::string kRemoteVideoLabel = "remote_video_label";
 static const std::string kStreamId = "stream_id";
 static const std::string kDataChanId = "data_chan";
 
 using SignalingState = webrtc::PeerConnectionInterface::SignalingState;
 
-PeerClient::PeerClient() : mq_(std::make_unique<MessageQueue>()) {}
-
-bool PeerClient::createPeerConnection()
+PeerClient::PeerClient()
 {
+    mq_ = std::make_unique<MessageQueue>();
     signaling_thread_ = rtc::Thread::CreateWithSocketServer();
     signaling_thread_->Start();
 
@@ -40,20 +42,26 @@ bool PeerClient::createPeerConnection()
     // disable_encryption would make data_channel create failed, bug?
     /* factory_opts.disable_encryption = true; */
     pc_factory_->SetOptions(factory_opts);
+}
 
+PeerClient::~PeerClient() { deletePeerConnection(); }
+
+bool PeerClient::createPeerConnection()
+{
     webrtc::PeerConnectionInterface::RTCConfiguration config;
     webrtc::PeerConnectionInterface::IceServer server;
 
-    config.sdp_semantics = webrtc::SdpSemantics::kUnifiedPlan;
     server.uri = kDefaultSTUNServer;
     config.servers.push_back(server);
+    config.sdp_semantics = webrtc::SdpSemantics::kUnifiedPlan;
+    // config.network_preference = rtc::AdapterType::ADAPTER_TYPE_WIFI;
 
-    webrtc::PeerConnectionDependencies pc_deps(this);
+    webrtc::PeerConnectionDependencies deps(this);
     auto err_or_pc =
-        pc_factory_->CreatePeerConnectionOrError(config, std::move(pc_deps));
+        pc_factory_->CreatePeerConnectionOrError(config, std::move(deps));
 
     if (err_or_pc.ok()) {
-        pc_ = std::move(err_or_pc.value());
+        pc_ = err_or_pc.MoveValue();
     }
 
     return pc_ != nullptr;
@@ -61,16 +69,44 @@ bool PeerClient::createPeerConnection()
 
 void PeerClient::deletePeerConnection()
 {
+    local_chan_->Close();
+    pc_->Close();
     pc_ = nullptr;
-    pc_factory_ = nullptr;
+    mq_ = std::make_unique<MessageQueue>();
+    is_caller_ = false;
+
+    if (local_video_src_ &&
+        local_video_src_->state() == VideoSource::SourceState::kLive)
+        local_video_src_->Stop();
+    if (local_sink_)
+        local_sink_->Stop();
+    if (remote_video_src_ && remote_video_src_->state() == VideoSource::kLive)
+        remote_video_src_->Stop();
+    if (remote_sink_)
+        remote_sink_->Stop();
+}
+
+void PeerClient::createTransceivers()
+{
+    auto transceiver =
+        pc_->AddTransceiver(cricket::MediaType::MEDIA_TYPE_AUDIO);
+    if (!transceiver.ok()) {
+        logger::error("failed to add transceiver: {}",
+                      transceiver.error().message());
+    }
+    transceiver = pc_->AddTransceiver(cricket::MediaType::MEDIA_TYPE_VIDEO);
+    if (!transceiver.ok()) {
+        logger::error("failed to add transceiver: {}",
+                      transceiver.error().message());
+    }
+
+    if (remote_sink_) {
+        remote_sink_->Start();
+    }
 }
 
 void PeerClient::createLocalTracks()
 {
-    if (!pc_->GetSenders().empty()) {
-        return; // already added
-    }
-
     auto audio_src = pc_factory_->CreateAudioSource(cricket::AudioOptions());
     auto audio_track =
         pc_factory_->CreateAudioTrack(kAudioLabel, audio_src.get());
@@ -80,34 +116,58 @@ void PeerClient::createLocalTracks()
     }
 
     if (local_video_src_) {
-        auto local_video_track =
-            pc_factory_->CreateVideoTrack(kLocalVideoLabel, local_video_src_);
+        local_video_src_->Start();
+        auto local_video_track = pc_factory_->CreateVideoTrack(
+            kLocalVideoLabel, local_video_src_.get());
         if (local_sink_) {
-            local_video_track->AddOrUpdateSink(local_sink_,
+            local_video_track->AddOrUpdateSink(local_sink_.get(),
                                                rtc::VideoSinkWants());
+            local_sink_->Start();
         }
     }
 
-    auto remote_video_track =
-        pc_factory_->CreateVideoTrack(kRemoteVideoLabel, remote_video_src_);
-    result = pc_->AddTrack(remote_video_track, {kStreamId});
-    if (!result.ok()) {
-        logger::error("failed to add remote video track");
+    if (remote_video_src_) {
+        remote_video_src_->Start();
+        // the scoped_refptr version will throw a weird `bad_alloc`, bug?
+        auto remote_video_track = pc_factory_->CreateVideoTrack(
+            kRemoteVideoLabel, remote_video_src_.get());
+        result = pc_->AddTrack(remote_video_track, {kStreamId});
+        if (!result.ok()) {
+            logger::error("failed to add remote video track");
+        }
+    }
+}
+
+void PeerClient::createDataChannel()
+{
+    webrtc::DataChannelInit config{.protocol = "x11-rdp"};
+    auto data_chan = pc_->CreateDataChannelOrError(kDataChanId, &config);
+    if (data_chan.ok()) {
+        local_chan_ = data_chan.value();
+    } else {
+        logger::error("failed to add data channel");
     }
 }
 
 void PeerClient::addLocalVideoSource(VideoSourcePtr src)
 {
-    local_video_src_ = src;
+    local_video_src_ = std::move(src);
 }
+
 void PeerClient::addRemoteVideoSource(VideoSourcePtr src)
 {
-    remote_video_src_ = src;
+    remote_video_src_ = std::move(src);
 }
 
-void PeerClient::addLocalSinks(VideoSinkPtr sink) { local_sink_ = sink; }
+void PeerClient::addLocalSinks(VideoSinkPtr sink)
+{
+    local_sink_ = std::move(sink);
+}
 
-void PeerClient::addRemoteSinks(VideoSinkPtr sink) { remote_sink_ = sink; }
+void PeerClient::addRemoteSinks(VideoSinkPtr sink)
+{
+    remote_sink_ = std::move(sink);
+}
 
 void PeerClient::OnSignal(MessageType mt, const std::string &payload)
 {
@@ -115,6 +175,7 @@ void PeerClient::OnSignal(MessageType mt, const std::string &payload)
     case MessageType::kUnknown:
         break;
     case MessageType::kReady:
+        onReady();
         break;
     case MessageType::kOffer:
         is_caller_ = false;
@@ -128,24 +189,25 @@ void PeerClient::OnSignal(MessageType mt, const std::string &payload)
         onRemoteCandidate(payload);
         break;
     case MessageType::kBye:
+        onRemoteBye();
+        break;
+    case MessageType::kLogout:
+        onDisconnect();
         break;
     }
 }
 
-void PeerClient::makeCall()
+void PeerClient::onReady()
 {
     // pc_->RestartIce();
     logger::info("start calling");
-
-    webrtc::DataChannelInit config{.protocol = "x11-rdp"};
-    auto data_chan = pc_->CreateDataChannelOrError(kDataChanId, &config);
-    if (data_chan.ok()) {
-        local_chan_ = data_chan.value();
-    } else {
-        logger::error("failed to add data channel");
-    }
-
     is_caller_ = true;
+
+    // we don't send stream as caller
+    createPeerConnection();
+    createTransceivers();
+    createDataChannel();
+
     assert(pc_->signaling_state() ==
            webrtc::PeerConnectionInterface::SignalingState::kStable);
     webrtc::PeerConnectionInterface::RTCOfferAnswerOptions opts;
@@ -155,6 +217,10 @@ void PeerClient::makeCall()
 void PeerClient::onRemoteOffer(const std::string &sdp)
 {
     logger::debug("got remote offer:\n{}", sdp);
+    createPeerConnection();
+    createLocalTracks();
+    createDataChannel();
+
     assert(pc_->signaling_state() ==
            webrtc::PeerConnectionInterface::SignalingState::kStable);
     webrtc::SdpParseError err;
@@ -194,16 +260,16 @@ void PeerClient::onRemoteCandidate(const std::string &sdp)
     });
 }
 
-// impl CreateSessionDescriptorInterface
-
-void PeerClient::OnSuccess(webrtc::SessionDescriptionInterface *desc)
+void PeerClient::onRemoteBye()
 {
-    logger::debug("create local offer/answer: {}", desc->type());
+    logger::debug("remote send a disconnect");
+    deletePeerConnection();
 }
 
-void PeerClient::OnFailure(webrtc::RTCError error)
+void PeerClient::onDisconnect()
 {
-    logger::error("create local offer/answer failed: {}", error.message());
+    logger::debug("disconnect from server and peer");
+    deletePeerConnection();
 }
 
 void PeerClient::SetRemoteSDPCallback::OnSetRemoteDescriptionComplete(
@@ -239,38 +305,20 @@ void PeerClient::SetLocalSDPCallback::OnSetLocalDescriptionComplete(
 
 // PeerConnectionObserver impl
 
-void PeerClient::OnAddStream(
-    rtc::scoped_refptr<webrtc::MediaStreamInterface> stream)
+void PeerClient::OnTrack(
+    rtc::scoped_refptr<webrtc::RtpTransceiverInterface> transceiver)
 {
-    auto vs = stream->GetVideoTracks();
-    if (vs.size() > 0) {
-        vs[0]->AddOrUpdateSink(remote_sink_, rtc::VideoSinkWants());
-    }
-};
-
-void PeerClient::OnRemoveStream(
-    rtc::scoped_refptr<webrtc::MediaStreamInterface> stream)
-{
-    auto vs = stream->GetVideoTracks();
-    for (auto &v : vs) {
-        v->RemoveSink(remote_sink_);
-    }
-};
-
-void PeerClient::OnAddTrack(
-    rtc::scoped_refptr<webrtc::RtpReceiverInterface> receiver,
-    const std::vector<rtc::scoped_refptr<webrtc::MediaStreamInterface>>
-        &streams)
-{
-    auto track = receiver->track().release();
+    auto track = transceiver->receiver()->track().release();
+    logger::debug("OnTrack: {}", track->id());
     if (track->kind() == webrtc::MediaStreamTrackInterface::kVideoKind) {
         auto video_track = static_cast<webrtc::VideoTrackInterface *>(track);
         if (remote_sink_) {
             rtc::VideoSinkWants wants;
-            video_track->AddOrUpdateSink(remote_sink_, rtc::VideoSinkWants());
+            video_track->AddOrUpdateSink(remote_sink_.get(),
+                                         rtc::VideoSinkWants());
         }
     }
-};
+}
 
 void PeerClient::OnRemoveTrack(
     rtc::scoped_refptr<webrtc::RtpReceiverInterface> receiver)
@@ -279,10 +327,10 @@ void PeerClient::OnRemoveTrack(
     if (track->kind() == webrtc::MediaStreamTrackInterface::kVideoKind) {
         auto video_track = static_cast<webrtc::VideoTrackInterface *>(track);
         if (remote_sink_) {
-            video_track->RemoveSink(remote_sink_);
+            video_track->RemoveSink(remote_sink_.get());
         }
     }
-};
+}
 
 void PeerClient::OnDataChannel(
     rtc::scoped_refptr<webrtc::DataChannelInterface> data_channel)
@@ -291,7 +339,7 @@ void PeerClient::OnDataChannel(
                   data_channel->id(), data_channel->protocol());
     remote_chan_ = data_channel;
     remote_chan_->RegisterObserver(this);
-};
+}
 
 void PeerClient::OnIceCandidate(const webrtc::IceCandidateInterface *candidate)
 {
@@ -329,13 +377,11 @@ void PeerClient::OnMessage(const webrtc::DataBuffer &msg)
         std::string m(reinterpret_cast<const char *>(msg.data.data()),
                       msg.size());
         logger::debug("recv remote text message: {}", m);
-    } else {
-        /* logger::debug("recv remote binary message: {}", msg.size()); */
     }
     mq_->push(PeerClient::ChanMessage{msg.data.data(), msg.size(), msg.binary});
 }
 
-bool PeerClient::sendTextMessage(const std::string &text)
+bool PeerClient::postTextMessage(const std::string &text)
 {
     if (!local_chan_)
         return false;
@@ -343,7 +389,7 @@ bool PeerClient::sendTextMessage(const std::string &text)
     return local_chan_->Send(blob);
 }
 
-bool PeerClient::sendBinaryMessage(const uint8_t *data, size_t size)
+bool PeerClient::postBinaryMessage(const uint8_t *data, size_t size)
 {
     if (!local_chan_)
         return false;
@@ -352,7 +398,7 @@ bool PeerClient::sendBinaryMessage(const uint8_t *data, size_t size)
     return local_chan_->Send(blob);
 }
 
-std::optional<PeerClient::ChanMessage> PeerClient::recvMessage()
+std::optional<PeerClient::ChanMessage> PeerClient::pollRemoteMessage()
 {
     if (mq_->empty())
         return {};

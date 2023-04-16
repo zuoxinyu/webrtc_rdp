@@ -1,13 +1,14 @@
 #pragma once
 
+#include "video_source.hh"
+
 #include <memory>
 
 #include "api/media_stream_interface.h"
 #include "api/video/video_frame.h"
 #include "api/video/video_source_interface.h"
-#include "pc/video_track_source.h"
 
-struct FakeCapturer : public webrtc::VideoTrackSource {
+struct CameraCapturer : public VideoSource {
   public:
     struct Config {
         int width;
@@ -16,17 +17,20 @@ struct FakeCapturer : public webrtc::VideoTrackSource {
     };
 
   public:
-    FakeCapturer(Config conf);
-    ~FakeCapturer() override = default;
+    CameraCapturer(Config conf);
+    ~CameraCapturer() override = default;
 
     static size_t GetDeviceNum();
-    static rtc::scoped_refptr<FakeCapturer> Create(Config conf);
+    static rtc::scoped_refptr<CameraCapturer> Create(Config conf);
 
   public:
     rtc::VideoSourceInterface<webrtc::VideoFrame> *source() override
     {
         return source_.get();
     }
+
+    void Start() override;
+    void Stop() override;
 
   private:
     std::unique_ptr<rtc::VideoSourceInterface<webrtc::VideoFrame>> source_;

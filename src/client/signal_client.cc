@@ -1,10 +1,12 @@
 #include "signal_client.hh"
+#include "client/callbacks.hh"
 #include "logger.hh"
 
 #include <algorithm>
 #include <chrono>
 #include <exception>
 #include <iostream>
+#include <spdlog/spdlog.h>
 #include <thread>
 #include <utility>
 
@@ -26,11 +28,14 @@ SignalClient::SignalClient(io_context &ctx, Config conf)
 {
 }
 
-SignalClient::~SignalClient()
+SignalClient::~SignalClient() { doLogout(); }
+
+void SignalClient::login(const std::string &server, int port)
 {
-    stream_.close();
-    wait_timer_.cancel();
+    co_spawn(ctx_, signin(server, port), detached);
 }
+
+void SignalClient::logout() { co_spawn(ctx_, signout(), detached); }
 
 // impl UIObserver
 awaitable<void> SignalClient::signin(std::string host, int port)
@@ -71,6 +76,7 @@ awaitable<void> SignalClient::signin(std::string host, int port)
         } else {
             logger::error("login failed: {}", se.what());
         }
+        doLogout();
         co_return;
     }
 
@@ -113,23 +119,36 @@ awaitable<void> SignalClient::waitMessage()
                 std::string payload(msg["payload"].get_string());
 
                 if (mt == MessageType::kOffer) {
-                    setCurrentPeer(peer_id);
+                    startSession(peer_id);
                 }
                 peer_observer_->OnSignal(mt, payload);
             }
             co_await wait_timer_.async_wait(use_awaitable);
         }
-    } catch (const std::exception &e) {
-        logger::error("wait error: {}", e.what());
+    } catch (beast::system_error &se) {
+        if (se.code() == http::error::end_of_stream) {
+            logger::error("login failed: server closed");
+        } else if (se.code() == asio::error::connection_refused) {
+            logger::error("login failed: connectioin refused");
+        } else {
+            logger::error("login failed: {}", se.what());
+        }
+        doLogout();
+        co_return;
     }
 }
 
-awaitable<void> SignalClient::logout()
+awaitable<void> SignalClient::signout()
+{
+    doLogout();
+    co_return;
+}
+
+void SignalClient::doLogout()
 {
     stream_.close();
     wait_timer_.cancel();
     me_.online = false;
-    co_return;
 }
 
 awaitable<void> SignalClient::sendMessage(Peer::Id peer_id, std::string payload,
@@ -176,16 +195,24 @@ awaitable<void> SignalClient::handlePendingMessages()
     while (!pending_messages_.empty()) {
         auto m = pending_messages_.front();
         pending_messages_.pop();
-        co_await sendMessage(currentPeer(), m.payload, m.mt);
+        co_await sendMessage(current(), m.payload, m.mt);
     }
 };
 
 void SignalClient::setPeers(const json::value &v)
 {
     json::array peers = v.as_array();
+    peers_.clear();
+
     std::for_each(peers.begin(), peers.end(), [this](const Peer &v) {
         peers_.insert({v.id, v});
     });
+
+    if (calling() && peers_.find(current()) == peers_.end()) {
+        logger::info("current peer logout or closed: {}", current());
+        peer_observer_->OnSignal(MessageType::kBye, "bye");
+        current_peer_ = {};
+    }
 }
 
 const Peer::List SignalClient::onlinePeers() const
@@ -214,4 +241,17 @@ const Peer::List SignalClient::offlinePeers() const
 void SignalClient::SendSignal(MessageType mt, const std::string &msg)
 {
     pending_messages_.push({mt, msg});
+}
+
+void SignalClient::stopSession()
+{
+    SendSignal(MessageType::kBye, "bye");
+    peer_observer_->OnSignal(MessageType::kLogout, "logout");
+    current_peer_ = {};
+}
+
+void SignalClient::startSession(Peer::Id peer_id)
+{
+    peer_observer_->OnSignal(MessageType::kReady, "ready");
+    current_peer_ = std::move(peer_id);
 }

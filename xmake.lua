@@ -6,6 +6,9 @@ set_defaultmode("debug")
 local webrtc_dir = '../webrtc'
 local webrtc_src_dir = path.join(webrtc_dir, 'src')
 local webrtc_out_dir = 'out/linux-debug'
+if is_mode('rlease') then
+    webrtc_out_dir = 'out/linux-release'
+end
 local webrtc_obj_dir = path.join(webrtc_src_dir, webrtc_out_dir, 'obj')
 
 local gn_args = {
@@ -49,7 +52,7 @@ target('dezk', function()
     add_syslinks('rt', 'atomic', 'GL', 'GLEW', 'drm')
 
     after_build(function(target)
-        os.run('scp %s doubleleft@10.10.10.133:/home/doubleleft/', target:targetfile())
+        os.exec('scp %s doubleleft@10.10.10.133:/home/doubleleft/', target:targetfile())
     end)
 
     -- add_deps('webrtc')
@@ -64,28 +67,28 @@ target('signal_server', function()
     add_packages('boost_json', 'boost_url', 'boost_beast', 'spdlog', { configs = { shared = false } })
 
     after_build(function(target)
-        os.run('scp %s doubleleft@10.10.10.133:/home/doubleleft/', target:targetfile())
+        os.exec('scp %s doubleleft@10.10.10.133:/home/doubleleft/', target:targetfile())
     end)
 end)
 
-target('webrtc', function()
-    set_kind('static')
-    set_languages('c17', 'cxx17')
-    add_rules('c++')
-    set_targetdir('libwebrtc/debug')
-    add_files(webrtc_obj_dir .. '/**.o')
-
-    remove_files(webrtc_obj_dir .. '/third_party/yasm/gen*/**.o')
-    remove_files(webrtc_obj_dir .. '/third_party/yasm/re2c/**.o')
-    remove_files(webrtc_obj_dir .. '/third_party/yasm/yasm/**.o')
-    remove_files(webrtc_obj_dir .. '/third_party/protobuf/protoc/*.o')
-    remove_files(webrtc_obj_dir .. '/third_party/protobuf/protobuf_full/*.o')
-    remove_files(webrtc_obj_dir .. '/webrtc/examples/**.o')
-    remove_files(webrtc_obj_dir .. '/webrtc/modules/audio_coding/delay_test/utility.o')
-    remove_files(webrtc_obj_dir .. '/webrtc/modules/modules_tests/utility.o')
-    remove_files(webrtc_obj_dir .. '/webrtc/modules/video_capture/video_capture/video_capture_external.o')
-    remove_files(webrtc_obj_dir .. '/webrtc/modules/video_capture/video_capture/device_info_external.o')
-end)
+-- target('webrtc', function()
+--     set_kind('static')
+--     set_languages('c17', 'cxx17')
+--     add_rules('c++')
+--     set_targetdir('libwebrtc/debug')
+--     add_files(webrtc_obj_dir .. '/**.o')
+--
+--     remove_files(webrtc_obj_dir .. '/third_party/yasm/gen*/**.o')
+--     remove_files(webrtc_obj_dir .. '/third_party/yasm/re2c/**.o')
+--     remove_files(webrtc_obj_dir .. '/third_party/yasm/yasm/**.o')
+--     remove_files(webrtc_obj_dir .. '/third_party/protobuf/protoc/*.o')
+--     remove_files(webrtc_obj_dir .. '/third_party/protobuf/protobuf_full/*.o')
+--     remove_files(webrtc_obj_dir .. '/webrtc/examples/**.o')
+--     remove_files(webrtc_obj_dir .. '/webrtc/modules/audio_coding/delay_test/utility.o')
+--     remove_files(webrtc_obj_dir .. '/webrtc/modules/modules_tests/utility.o')
+--     remove_files(webrtc_obj_dir .. '/webrtc/modules/video_capture/video_capture/video_capture_external.o')
+--     remove_files(webrtc_obj_dir .. '/webrtc/modules/video_capture/video_capture/device_info_external.o')
+-- end)
 
 
 task('fetch-webrtc', function()
