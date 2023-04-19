@@ -21,10 +21,20 @@ struct PeerClient : private webrtc::PeerConnectionObserver,
 
   public:
     struct Config {
-        bool use_codec;
-        std::string video_codec;
-        bool enable_audio;
-        bool enable_camera;
+        Config() {}
+        Config(const Config &) = default;
+        Config(Config &&) = default;
+        Config &operator=(const Config &) = default;
+        Config &operator=(Config &&) = default;
+        bool use_codec = false;
+        std::string video_codec = "video/H264";
+        bool enable_chat = true;
+        bool enable_audio = false;
+        bool enable_screen = true;
+        bool enable_camera = false;
+        bool enable_control = true;
+        bool enable_clipboard = false;
+        bool enable_file_transfer = false;
     };
 
     struct ChanMessage {
@@ -41,14 +51,14 @@ struct PeerClient : private webrtc::PeerConnectionObserver,
     friend struct SetLocalSDPCallback;
 
   public:
-    PeerClient(Config conf = {false, "video/VP8"});
+    PeerClient(Config conf = Config());
     ~PeerClient() override;
 
     // external resources about
-    void add_local_video_source(VideoSourcePtr);
-    void add_remote_video_source(VideoSourcePtr);
-    void add_local_sinks(VideoSinkPtr);
-    void add_remote_sinks(VideoSinkPtr);
+    void add_camera_video_source(VideoSourcePtr);
+    void add_screen_video_source(VideoSourcePtr);
+    void add_camera_sinks(VideoSinkPtr);
+    void add_screen_sinks(VideoSinkPtr);
     void set_signaling_observer(SignalingObserver *ob)
     {
         signaling_observer_ = ob;
@@ -107,10 +117,10 @@ struct PeerClient : private webrtc::PeerConnectionObserver,
 
   private:
     // external resources
-    VideoSourcePtr local_video_src_ = nullptr;
-    VideoSourcePtr remote_video_src_ = nullptr;
-    VideoSinkPtr local_sink_ = nullptr;
-    VideoSinkPtr remote_sink_ = nullptr;
+    VideoSourcePtr camera_src_ = nullptr;
+    VideoSourcePtr screen_src_ = nullptr;
+    VideoSinkPtr camera_sink_ = nullptr;
+    VideoSinkPtr screen_sink_ = nullptr;
     SignalingObserver *signaling_observer_ = nullptr;
     StatsObserver *stats_observer_ = nullptr;
     // internal resources

@@ -52,13 +52,6 @@ struct SignalClient : public SignalingObserver {
 
   public:
     explicit SignalClient(io_context &ctx, Config conf = kDefaultConfig);
-    explicit SignalClient(io_context &ctx, const std::string &name)
-        : SignalClient(ctx, {name, kDefaultConfig.host, kDefaultConfig.port,
-                             kDefaultConfig.use_websocket,
-                             kDefaultConfig.stream_expire_time,
-                             kDefaultConfig.http_wait_time})
-    {
-    }
     ~SignalClient();
 
   public:
@@ -87,7 +80,8 @@ struct SignalClient : public SignalingObserver {
   private:
     awaitable<void> signin(std::string server, int port);
     awaitable<void> signout();
-    awaitable<void> send_message(Peer::Id id, std::string offer, MessageType mt);
+    awaitable<void> send_message(Peer::Id id, std::string offer,
+                                 MessageType mt);
     awaitable<void> wait_message();
     awaitable<void> handle_pending_messages();
 

@@ -28,6 +28,7 @@ class MainWindow
     void peers_window(mu_Context *ctx);
     void login_window(mu_Context *ctx);
     void chat_window(mu_Context *ctx);
+    void stats_window(mu_Context *ctx);
 
     // handlers
     void process_mu_windows();
@@ -40,8 +41,9 @@ class MainWindow
     void logout();
     void connect(const Peer::Id &);
     void disconnect();
-    void write_chat_message(const std::string &who, const char *buf);
-    void get_stats();
+    void update_chat(const std::string &who, const char *buf);
+    void open_stats();
+    void open_chat();
 
   private:
     std::string title_;
@@ -61,5 +63,6 @@ class MainWindow
     bool running_ = false;
     char chatbuf_[64000] = {0};
     bool chatbuf_updated_ = false;
+    bool show_stats_ = false;
     std::string stats_json_;
 };

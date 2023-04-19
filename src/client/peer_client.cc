@@ -17,11 +17,10 @@
 #include "rtc_base/thread.h"
 
 static const std::string kDefaultSTUNServer = "stun:stun1.l.google.com:19302";
-static const std::string kAudioLabel = "x-remote-audio";
-static const std::string kLocalVideoLabel = "x-remote-face";
-static const std::string kRemoteVideoLabel = "x-remote-video";
-static const std::string kStreamId = "x-remote-stream";
-static const std::string kDataChanId = "x-remote-input-data-chan";
+static const std::string kAudioLabel = "x-remote-track-audio";
+static const std::string kDataChanId = "x-remote-chan-input";
+static const std::string kCameraVideoLabel = "x-remote-track-camera";
+static const std::string kScreenVideoLabel = "x-remote-track-screen";
 
 using SignalingState = webrtc::PeerConnectionInterface::SignalingState;
 
@@ -134,15 +133,14 @@ void PeerClient::delete_peer_connection()
     mq_ = std::make_unique<MessageQueue>();
     is_caller_ = false;
 
-    if (local_video_src_ &&
-        local_video_src_->state() == VideoSource::SourceState::kLive)
-        local_video_src_->Stop();
-    if (local_sink_)
-        local_sink_->Stop();
-    if (remote_video_src_ && remote_video_src_->state() == VideoSource::kLive)
-        remote_video_src_->Stop();
-    if (remote_sink_)
-        remote_sink_->Stop();
+    if (camera_src_ && camera_src_->state() == VideoSource::SourceState::kLive)
+        camera_src_->Stop();
+    if (camera_sink_)
+        camera_sink_->Stop();
+    if (screen_src_ && screen_src_->state() == VideoSource::kLive)
+        screen_src_->Stop();
+    if (screen_sink_)
+        screen_sink_->Stop();
 }
 
 void PeerClient::create_transceivers()
@@ -167,47 +165,48 @@ void PeerClient::create_transceivers()
                           transceiver.error().message());
         }
 
-        if (remote_sink_) {
-            remote_sink_->Start();
+        if (screen_sink_) {
+            screen_sink_->Start();
         }
     }
 }
 
+// TODO: use AddTransceiver instead
 void PeerClient::create_media_tracks()
 {
     if (conf_.enable_audio) {
         auto audio_src =
             pc_factory_->CreateAudioSource(cricket::AudioOptions());
-        auto audio_track =
+        auto track =
             pc_factory_->CreateAudioTrack(kAudioLabel, audio_src.get());
-        auto result = pc_->AddTrack(audio_track, {kStreamId});
+        auto result = pc_->AddTrack(track, {kAudioLabel});
         if (!result.ok()) {
             logger::error("failed to add audio track");
         }
     }
 
     if (conf_.enable_camera) {
-        if (false && local_video_src_) {
-            local_video_src_->Start();
-            auto local_video_track = pc_factory_->CreateVideoTrack(
-                kLocalVideoLabel, local_video_src_.get());
-
-            if (local_sink_) {
-                local_video_track->AddOrUpdateSink(local_sink_.get(),
-                                                   rtc::VideoSinkWants());
-                local_sink_->Start();
+        if (camera_src_) {
+            camera_src_->Start();
+            auto track = pc_factory_->CreateVideoTrack(kCameraVideoLabel,
+                                                       camera_src_.get());
+            auto result = pc_->AddTrack(track, {kCameraVideoLabel});
+            if (!result.ok()) {
+                logger::error("failed to add camera video track");
             }
         }
     }
 
-    if (remote_video_src_) {
-        remote_video_src_->Start();
-        // the scoped_refptr version will throw a weird `bad_alloc`, bug?
-        auto remote_video_track = pc_factory_->CreateVideoTrack(
-            kRemoteVideoLabel, remote_video_src_.get());
-        auto result = pc_->AddTrack(remote_video_track, {kStreamId});
-        if (!result.ok()) {
-            logger::error("failed to add remote video track");
+    if (conf_.enable_screen) {
+        if (screen_src_) {
+            screen_src_->Start();
+            // the scoped_refptr version will throw a weird `bad_alloc`, bug?
+            auto track = pc_factory_->CreateVideoTrack(kScreenVideoLabel,
+                                                       screen_src_.get());
+            auto result = pc_->AddTrack(track, {kScreenVideoLabel});
+            if (!result.ok()) {
+                logger::error("failed to add screen video track");
+            }
         }
     }
 
@@ -236,7 +235,7 @@ void PeerClient::create_media_tracks()
                 -> bool {
                 return it->media_type() == cricket::MEDIA_TYPE_VIDEO &&
                        it->sender() &&
-                       it->sender()->track()->id() == kRemoteVideoLabel;
+                       it->sender()->track()->id() == kScreenVideoLabel;
             });
         if (video_sender == transceivers.cend()) {
             return;
@@ -259,24 +258,24 @@ void PeerClient::create_data_channel()
     }
 }
 
-void PeerClient::add_local_video_source(VideoSourcePtr src)
+void PeerClient::add_camera_video_source(VideoSourcePtr src)
 {
-    local_video_src_ = std::move(src);
+    camera_src_ = std::move(src);
 }
 
-void PeerClient::add_remote_video_source(VideoSourcePtr src)
+void PeerClient::add_screen_video_source(VideoSourcePtr src)
 {
-    remote_video_src_ = std::move(src);
+    screen_src_ = std::move(src);
 }
 
-void PeerClient::add_local_sinks(VideoSinkPtr sink)
+void PeerClient::add_camera_sinks(VideoSinkPtr sink)
 {
-    local_sink_ = std::move(sink);
+    camera_sink_ = std::move(sink);
 }
 
-void PeerClient::add_remote_sinks(VideoSinkPtr sink)
+void PeerClient::add_screen_sinks(VideoSinkPtr sink)
 {
-    remote_sink_ = std::move(sink);
+    screen_sink_ = std::move(sink);
 }
 
 void PeerClient::OnSignal(MessageType mt, const std::string &payload)
@@ -391,11 +390,21 @@ void PeerClient::OnTrack(
     rtc::scoped_refptr<webrtc::RtpTransceiverInterface> transceiver)
 {
     auto track = transceiver->receiver()->track().release();
-    logger::debug("OnTrack: {}", track->id());
+    logger::debug("OnTrack: stream_id[0]: {} receiver->id: {} track->id: {}",
+                  transceiver->receiver()->stream_ids()[0],
+                  transceiver->receiver()->id(), track->id());
     if (track->kind() == webrtc::MediaStreamTrackInterface::kVideoKind) {
         auto video_track = static_cast<webrtc::VideoTrackInterface *>(track);
-        if (remote_sink_) {
-            video_track->AddOrUpdateSink(remote_sink_.get(),
+        // `track->id` is not guaranteed to be the same as `label` in remote
+        // pc_factory_->CreateVideoTrack(label), use stream id instead
+        if (transceiver->receiver()->stream_ids()[0] == kScreenVideoLabel &&
+            screen_sink_) {
+            video_track->AddOrUpdateSink(screen_sink_.get(),
+                                         rtc::VideoSinkWants());
+        }
+        if (transceiver->receiver()->stream_ids()[0] == kCameraVideoLabel &&
+            camera_sink_) {
+            video_track->AddOrUpdateSink(camera_sink_.get(),
                                          rtc::VideoSinkWants());
         }
     }
@@ -407,8 +416,11 @@ void PeerClient::OnRemoveTrack(
     auto track = receiver->track().release();
     if (track->kind() == webrtc::MediaStreamTrackInterface::kVideoKind) {
         auto video_track = static_cast<webrtc::VideoTrackInterface *>(track);
-        if (remote_sink_) {
-            video_track->RemoveSink(remote_sink_.get());
+        if (receiver->stream_ids()[0] == kScreenVideoLabel && screen_sink_) {
+            video_track->RemoveSink(screen_sink_.get());
+        }
+        if (receiver->stream_ids()[0] == kCameraVideoLabel && camera_sink_) {
+            video_track->RemoveSink(camera_sink_.get());
         }
     }
 }

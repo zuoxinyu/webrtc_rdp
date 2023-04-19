@@ -67,13 +67,13 @@ MainWindow::MainWindow(mu_Context *ctx, int argc, char *argv[])
     cc_->set_peer_observer(pc_.get()); // recursive reference?
     pc_->set_signaling_observer(cc_.get());
     pc_->set_stats_observer(stats_observer_.get());
-    pc_->add_remote_video_source(remote_video_src_);
-    pc_->add_remote_sinks(remote_renderer_);
+    pc_->add_screen_video_source(remote_video_src_);
+    pc_->add_screen_sinks(remote_renderer_);
     if (CameraCapturer::GetDeviceNum() > 0) {
         local_video_src_ =
             CameraCapturer::Create({.width = 600, .height = 400, .fps = 30});
-        pc_->add_local_video_source(local_video_src_);
-        pc_->add_local_sinks(local_renderer_);
+        pc_->add_camera_video_source(local_video_src_);
+        pc_->add_camera_sinks(local_renderer_);
     }
 }
 
@@ -94,25 +94,42 @@ void MainWindow::logout()
     cc_->logout();
 }
 
-void MainWindow::connect(const Peer::Id &id) { cc_->start_session(id); }
+void MainWindow::connect(const Peer::Id &id)
+{
+    if (cc_->calling()) {
+        disconnect();
+    }
+    cc_->start_session(id);
+}
 
-void MainWindow::disconnect() { cc_->stop_session(); }
+void MainWindow::disconnect()
+{
+    if (cc_->calling())
+        cc_->stop_session();
+}
 
-void MainWindow::write_chat_message(const std::string &who, const char *buf)
+void MainWindow::open_stats()
+{
+    if (cc_->calling()) {
+        show_stats_ = true;
+        pc_->get_stats();
+    }
+}
+
+void MainWindow::update_chat(const std::string &who, const char *buf)
 {
     if (chatbuf_[0]) {
         std::strcat(chatbuf_, "\n");
     }
-    auto prefix = who + ":\n";
+    auto prefix = who + ": ";
     std::strcat(chatbuf_, prefix.c_str());
     std::strcat(chatbuf_, buf);
     chatbuf_updated_ = true;
 }
-
-void MainWindow::get_stats()
+void MainWindow::open_chat()
 {
     if (cc_->calling())
-        pc_->get_stats();
+        show_stats_ = false;
 }
 
 void MainWindow::stop() { running_ = false; }
@@ -124,6 +141,7 @@ void MainWindow::run()
     auto is_main_event = [](SDL_Event &e) {
         return e.window.windowID == SDL_GetWindowID(r_get_window());
     };
+
     auto is_remote_event = [this](SDL_Event &e) {
         return remote_renderer_ &&
                e.window.windowID ==
@@ -133,6 +151,17 @@ void MainWindow::run()
     SDL_Event e;
     EventExecutor::Event ee;
     std::optional<PeerClient::ChanMessage> msg;
+
+    auto timer = SDL_AddTimer(
+        5000,
+        [](unsigned tick, void *param) -> unsigned {
+            auto *that = static_cast<MainWindow *>(param);
+            if (that->cc_->calling()) {
+                that->pc_->get_stats();
+            }
+            return tick;
+        },
+        this);
 
     while (running_) {
         ioctx_.restart();
@@ -148,7 +177,7 @@ void MainWindow::run()
                 executor_->execute(ee);
             } else {
                 std::string text((const char *)msg->data, msg->size);
-                write_chat_message(cc_->peer().name, text.c_str());
+                update_chat(cc_->peer().name, text.c_str());
             }
         }
 
@@ -170,21 +199,36 @@ void MainWindow::run()
 
         ::usleep(12000);
     }
+
+    SDL_RemoveTimer(timer);
 }
 
 void MainWindow::process_mu_windows()
 {
     mu_begin(ctx_);
-    if (cc_ && cc_->online()) {
-        peers_window(ctx_);
-    } else {
-        login_window(ctx_);
-    }
+    peers_window(ctx_);
+    login_window(ctx_);
     if (cc_->calling()) {
-        chat_window(ctx_);
+        if (show_stats_) {
+            stats_window(ctx_);
+        } else {
+            chat_window(ctx_);
+        }
     }
-
     mu_end(ctx_);
+}
+
+void MainWindow::stats_window(mu_Context *ctx)
+{
+    if (mu_begin_window(ctx, "Stats", mu_rect(400, 0, 800, 800))) {
+        mu_layout_row(ctx, 1, (int[]){-1}, -25);
+        mu_begin_panel(ctx, "Stats Panel");
+        mu_Container *panel = mu_get_current_container(ctx);
+        mu_layout_row(ctx, 1, (int[]){-1}, -1);
+        mu_text(ctx, stats_json_.c_str());
+        mu_end_panel(ctx);
+        mu_end_window(ctx);
+    }
 }
 
 void MainWindow::chat_window(mu_Context *ctx)
@@ -215,7 +259,7 @@ void MainWindow::chat_window(mu_Context *ctx)
             submitted = 1;
         }
         if (submitted) {
-            write_chat_message(cc_->name(), buf);
+            update_chat(cc_->name(), buf);
             pc_->post_text_message(buf);
             buf[0] = '\0';
         }
@@ -226,98 +270,95 @@ void MainWindow::chat_window(mu_Context *ctx)
 
 void MainWindow::peers_window(mu_Context *ctx)
 {
-    static int voice_enabled = 0;
-    static int camera_enabled = 0;
+    auto peer_item = [this](mu_Context *ctx, const Peer &p) {
+        mu_layout_row(ctx, 6, (int[]){80, 80, 50, 50, 50, 50}, 25);
+        mu_label(ctx, p.name.c_str());
+        mu_label(ctx, p.id.c_str());
 
-    if (mu_begin_window(ctx, "Online Peers", mu_rect(0, 0, 400, 800))) {
+        if (p.id != cc_->id()) {
+            if (mu_button_ex(ctx, nullptr, MU_ICON_CHECK, 0)) {
+                connect(p.id);
+            }
+            if (mu_button_ex(ctx, nullptr, MU_ICON_CLOSE, 0)) {
+                disconnect();
+            }
+            if (mu_button(ctx, "chat")) {
+                open_chat();
+            }
+            if (mu_button(ctx, "stats")) {
+                open_stats();
+            }
+        } else {
+            mu_label(ctx, "");
+            mu_label(ctx, "");
+            mu_label(ctx, "");
+            mu_label(ctx, "");
+        }
+    };
+
+    if (mu_begin_window(ctx, "Online Peers", mu_rect(0, 0, 400, 600))) {
         if (mu_header_ex(ctx, "Online Peers", MU_OPT_EXPANDED)) {
-            int ws[3] = {-80, -40, -1};
-            mu_layout_row(ctx, 3, ws, 30);
-            for (auto &pair : cc_->online_peers()) {
-                mu_label(ctx, pair.second.name.c_str());
-                mu_label(ctx, pair.second.id.c_str());
-                auto id = pair.second.id;
-                if (id == cc_->id()) {
-                    mu_label(ctx, "me");
-                } else if (!cc_->calling()) {
-                    if (mu_button_ex(ctx, "", MU_ICON_CHECK, 0)) {
-                        connect(id);
-                    }
-                } else {
-                    if (mu_button_ex(
-                            ctx, "", MU_ICON_CLOSE,
-                            id == cc_->current() ? 0 : MU_OPT_NOINTERACT)) {
-                        disconnect();
-                    }
-                }
+            mu_layout_row(ctx, 3, (int[]){80, 80, -1}, 30);
+            mu_label(ctx, "Name");
+            mu_label(ctx, "ID");
+            mu_label(ctx, "Actions");
+
+            for (auto &[id, p] : cc_->peers()) {
+                peer_item(ctx, p);
             }
         }
-
-        if (mu_header_ex(ctx, "Offline Peers", MU_OPT_EXPANDED)) {
-            int ws[2] = {-80, -1};
-            mu_layout_row(ctx, 2, ws, 30);
-            for (auto &pair : cc_->offline_peers()) {
-                mu_label(ctx, pair.second.name.c_str());
-                mu_label(ctx, pair.second.id.c_str());
-            }
-        }
-
-        int bws[2] = {60, 60};
-        mu_layout_row(ctx, 2, bws, 25);
-        if (mu_button(ctx, "Exit")) {
-            stop();
-        }
-
-        if (mu_button(ctx, "Stats")) {
-            get_stats();
-        }
-
-        if (mu_checkbox(ctx, "voice", &voice_enabled)) {
-        }
-
-        if (mu_checkbox(ctx, "camera", &camera_enabled)) {
-        }
-
         mu_end_window(ctx);
     }
 }
 
 void MainWindow::login_window(mu_Context *ctx)
 {
-    if (mu_begin_window(ctx, "Login", mu_rect(450, 300, 300, 200))) {
-        int ws[2] = {-240, -1};
-        int submit = 0;
-        mu_layout_row(ctx, 2, ws, 25);
-        mu_text(ctx, "Name:");
-        if (mu_textbox(ctx, namebuf, sizeof(namebuf)) & MU_RES_SUBMIT) {
-            mu_set_focus(ctx, ctx->last_id);
-            submit = 1;
+    static int voice_enabled = 0;
+    static int camera_enabled = 0;
+
+    if (mu_begin_window(ctx, "Login", mu_rect(0, 600, 400, 200))) {
+        {
+            mu_layout_row(ctx, 2, (int[]){150, 150}, 25);
+            if (mu_checkbox(ctx, "voice", &voice_enabled)) {
+            }
+
+            if (mu_checkbox(ctx, "camera", &camera_enabled)) {
+            }
         }
-        mu_layout_row(ctx, 2, ws, 25);
-        mu_text(ctx, "Host:");
-        if (mu_textbox(ctx, hostbuf, sizeof(hostbuf)) & MU_RES_SUBMIT) {
-            mu_set_focus(ctx, ctx->last_id);
-            submit = 1;
-        }
-        mu_layout_row(ctx, 2, ws, 25);
-        mu_text(ctx, "Port:");
-        if (mu_textbox(ctx, portbuf, sizeof(portbuf)) & MU_RES_SUBMIT) {
-            mu_set_focus(ctx, ctx->last_id);
-            submit = 1;
+        if (!cc_->online()) {
+            int ws[2] = {-240, -1};
+            int submit = 0;
+            mu_layout_row(ctx, 2, ws, 25);
+            mu_text(ctx, "Name:");
+            if (mu_textbox(ctx, namebuf, sizeof(namebuf)) & MU_RES_SUBMIT) {
+                mu_set_focus(ctx, ctx->last_id);
+                submit = 1;
+            }
+            mu_text(ctx, "Host:");
+            if (mu_textbox(ctx, hostbuf, sizeof(hostbuf)) & MU_RES_SUBMIT) {
+                mu_set_focus(ctx, ctx->last_id);
+                submit = 1;
+            }
+            mu_text(ctx, "Port:");
+            if (mu_textbox(ctx, portbuf, sizeof(portbuf)) & MU_RES_SUBMIT) {
+                mu_set_focus(ctx, ctx->last_id);
+                submit = 1;
+            }
+
+            mu_layout_row(ctx, 1, (int[]){-1}, 25);
+            if (mu_button(ctx, "Login")) {
+                submit = 1;
+            }
+
+            if (submit || auto_login_) {
+                login();
+            }
         }
 
-        int bws[2] = {60, 60};
-        mu_layout_row(ctx, 2, bws, 25);
-        if (mu_button(ctx, "Login")) {
-            submit = 1;
-        }
-
+        mu_layout_height(ctx, -1);
+        mu_layout_row(ctx, 1, (int[]){-1}, 25);
         if (mu_button(ctx, "Exit")) {
             stop();
-        }
-
-        if (submit || auto_login_) {
-            login();
         }
 
         mu_end_window(ctx);

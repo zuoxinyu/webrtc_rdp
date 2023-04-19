@@ -43,7 +43,7 @@ add_requires('boost', {
         presets = { Boost_USE_STATIC_LIB = true }
     }
 })
-add_requires('boost_json', 'boost_url', 'boost_beast')
+add_requires('boost_json', 'boost_url')
 
 target('dezk', function()
     set_default(true)
@@ -145,3 +145,4 @@ task('echo-cmd', function()
         description = 'show webrtc build commands',
     }
 end)
+
