@@ -6,8 +6,18 @@ set_defaultmode("debug")
 local webrtc_dir = '../webrtc'
 local webrtc_src_dir = path.join(webrtc_dir, 'src')
 local webrtc_out_dir = 'out/linux-debug'
-if is_mode('rlease') then
-    webrtc_out_dir = 'out/linux-release'
+if is_os('linux') then
+    if is_mode('rlease') then
+        webrtc_out_dir = 'out/linux-release'
+    elseif is_mode('debug') then
+        webrtc_out_dir = 'out/linux-debug'
+    end
+elseif is_os('windows') then
+    if is_mode('rlease') then
+        webrtc_out_dir = 'out/windows-release'
+    elseif is_mode('debug') then
+        webrtc_out_dir = 'out/windows-debug'
+    end
 end
 local webrtc_obj_dir = path.join(webrtc_src_dir, webrtc_out_dir, 'obj')
 
@@ -27,18 +37,18 @@ local gn_cmd = string.format([[gn gen %s --args="%s"]], webrtc_out_dir, table.co
 local ninja_cmd = string.format([[ninja -C %s]], webrtc_out_dir)
 
 add_requires('SDL2', 'spdlog')
-add_requires('boost_json', 'boost_url', {
+add_requires('boost', {
     configs = {
+        json = true,
         presets = { Boost_USE_STATIC_LIB = true }
     }
 })
+add_requires('boost_json', 'boost_url', 'boost_beast')
 
 target('dezk', function()
     set_default(true)
     set_kind('binary')
     set_languages('c17', 'cxx20')
-    add_defines('WEBRTC_POSIX', 'WEBRTC_LINUX', 'WEBRTC_USE_X11', 'RTC_DISABLE_LOGGING')
-    add_cxxflags('-Wno-deprecated-declarations')
 
     add_includedirs('src', webrtc_src_dir)
     add_files('src/client/**.cc', 'src/client/**.c')
@@ -46,10 +56,17 @@ target('dezk', function()
     add_packages('boost_json', 'boost_url', 'boost_beast', 'spdlog', 'SDL2')
     add_linkdirs(webrtc_obj_dir)
     add_links('webrtc')
-    add_syslinks('dbus-1', 'glib-2.0', 'gobject-2.0', 'gmodule-2.0', 'gio-2.0', 'gbm')
-    add_syslinks('xdo', 'xcb', 'X11', 'Xext', 'Xfixes', 'Xdamage', 'Xrandr', 'Xrender', 'Xau', 'Xdmcp', 'Xcomposite',
-        'Xtst')
-    add_syslinks('rt', 'atomic', 'GL', 'GLEW', 'drm')
+
+    if is_os('linux') then
+        add_defines('WEBRTC_POSIX', 'WEBRTC_LINUX', 'WEBRTC_USE_X11', 'RTC_DISABLE_LOGGING')
+        add_cxxflags('-Wno-deprecated-declarations')
+        add_syslinks('dbus-1', 'glib-2.0', 'gobject-2.0', 'gmodule-2.0', 'gio-2.0', 'gbm')
+        add_syslinks('xdo', 'xcb', 'X11', 'Xext', 'Xfixes', 'Xdamage', 'Xrandr', 'Xrender', 'Xau', 'Xdmcp', 'Xcomposite',
+            'Xtst')
+        add_syslinks('rt', 'atomic', 'GL', 'GLEW', 'drm')
+    elseif is_os('windows') then
+        add_defines('WEBRTC_WIN', 'NOMINMAX', '_WIN32_WINNT=0x0601')
+    end
 
     after_build(function(target)
         os.exec('rsync %s notebook:dezk', target:targetfile())
