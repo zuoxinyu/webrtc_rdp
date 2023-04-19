@@ -62,21 +62,24 @@ struct SignalClient : public SignalingObserver {
     ~SignalClient();
 
   public:
-    void setPeerObserver(PeerObserver *observer) { peer_observer_ = observer; }
+    void set_peer_observer(PeerObserver *observer)
+    {
+        peer_observer_ = observer;
+    }
     void login(const std::string &server, int port);
     void logout();
     bool online() const { return me_.online; }
     bool calling() const { return current_peer_.has_value(); }
     const std::string id() const { return me_.id; }
     const std::string name() const { return me_.name; }
-    void setName(std::string name) { me_.name = std::move(name); }
+    void set_name(std::string name) { me_.name = std::move(name); }
     const Peer::Id current() const { return current_peer_.value(); }
     const Peer &peer() const { return peers_.at(current()); }
-    void startSession(Peer::Id peer_id);
-    void stopSession();
+    void start_session(Peer::Id peer_id);
+    void stop_session();
     const Peer::List &peers() const { return peers_; }
-    const Peer::List onlinePeers() const;
-    const Peer::List offlinePeers() const;
+    const Peer::List online_peers() const;
+    const Peer::List offline_peers() const;
 
   public:
     void SendSignal(MessageType, const std::string &) override;
@@ -84,13 +87,13 @@ struct SignalClient : public SignalingObserver {
   private:
     awaitable<void> signin(std::string server, int port);
     awaitable<void> signout();
-    awaitable<void> sendMessage(Peer::Id id, std::string offer, MessageType mt);
-    awaitable<void> waitMessage();
-    awaitable<void> handlePendingMessages();
+    awaitable<void> send_message(Peer::Id id, std::string offer, MessageType mt);
+    awaitable<void> wait_message();
+    awaitable<void> handle_pending_messages();
 
   private:
-    void setPeers(const json::value &v);
-    void doLogout();
+    void set_peers(const json::value &v);
+    void do_logout();
 
   private:
     // TODO: dedicate thread

@@ -21,7 +21,7 @@ struct ScreenCapturer : public VideoSource {
 
     static rtc::scoped_refptr<ScreenCapturer> Create(Config conf);
 
-    void setExludeWindow(webrtc::WindowId id)
+    void set_exlude_window(webrtc::WindowId id)
     {
         conf_.exlude_window_id.emplace_back(id);
     }

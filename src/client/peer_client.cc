@@ -17,15 +17,68 @@
 #include "rtc_base/thread.h"
 
 static const std::string kDefaultSTUNServer = "stun:stun1.l.google.com:19302";
-static const std::string kAudioLabel = "audio_label";
-static const std::string kLocalVideoLabel = "local_video_label";
-static const std::string kRemoteVideoLabel = "remote_video_label";
-static const std::string kStreamId = "stream_id";
-static const std::string kDataChanId = "data_chan";
+static const std::string kAudioLabel = "x-remote-audio";
+static const std::string kLocalVideoLabel = "x-remote-face";
+static const std::string kRemoteVideoLabel = "x-remote-video";
+static const std::string kStreamId = "x-remote-stream";
+static const std::string kDataChanId = "x-remote-input-data-chan";
 
 using SignalingState = webrtc::PeerConnectionInterface::SignalingState;
 
-PeerClient::PeerClient()
+struct SetLocalSDPCallback
+    : public webrtc::SetLocalDescriptionObserverInterface {
+    static rtc::scoped_refptr<SetLocalSDPCallback> Create(PeerClient *that)
+    {
+        return rtc::make_ref_counted<SetLocalSDPCallback>(that);
+    }
+    void OnSetLocalDescriptionComplete(webrtc::RTCError error) override
+    {
+
+        if (!error.ok()) {
+            logger::error("failed to set local description: {}",
+                          error.message());
+            return;
+        }
+
+        std::string sdp;
+        auto desc = that_->pc_->local_description();
+        desc->ToString(&sdp);
+
+        logger::debug("set local {}:\n{}", desc->type(), sdp);
+
+        auto mt =
+            that_->is_caller() ? MessageType::kOffer : MessageType::kAnswer;
+        that_->signaling_observer_->SendSignal(mt, sdp);
+    }
+
+    PeerClient *that_;
+    SetLocalSDPCallback(PeerClient *that) : that_(that) {}
+};
+
+struct SetRemoteSDPCallback
+    : public webrtc::SetRemoteDescriptionObserverInterface {
+    static rtc::scoped_refptr<SetRemoteSDPCallback> Create(PeerClient *that)
+    {
+        return rtc::make_ref_counted<SetRemoteSDPCallback>(that);
+    }
+    void OnSetRemoteDescriptionComplete(webrtc::RTCError error) override
+    {
+        if (!error.ok()) {
+            logger::error("failed to set remote description: {}",
+                          error.message());
+            return;
+        }
+
+        if (!that_->is_caller()) {
+            that_->pc_->SetLocalDescription(SetLocalSDPCallback::Create(that_));
+        }
+    }
+
+    PeerClient *that_;
+    SetRemoteSDPCallback(PeerClient *that) : that_(that) {}
+};
+
+PeerClient::PeerClient(Config conf) : conf_(std::move(conf))
 {
     mq_ = std::make_unique<MessageQueue>();
     signaling_thread_ = rtc::Thread::CreateWithSocketServer();
@@ -44,9 +97,13 @@ PeerClient::PeerClient()
     pc_factory_->SetOptions(factory_opts);
 }
 
-PeerClient::~PeerClient() { deletePeerConnection(); }
+PeerClient::~PeerClient()
+{
+    if (pc_)
+        delete_peer_connection();
+}
 
-bool PeerClient::createPeerConnection()
+bool PeerClient::create_peer_connection()
 {
     webrtc::PeerConnectionInterface::RTCConfiguration config;
     webrtc::PeerConnectionInterface::IceServer server;
@@ -54,20 +111,22 @@ bool PeerClient::createPeerConnection()
     server.uri = kDefaultSTUNServer;
     config.servers.push_back(server);
     config.sdp_semantics = webrtc::SdpSemantics::kUnifiedPlan;
-    // config.network_preference = rtc::AdapterType::ADAPTER_TYPE_WIFI;
+    config.network_preference = rtc::AdapterType::ADAPTER_TYPE_WIFI;
 
     webrtc::PeerConnectionDependencies deps(this);
     auto err_or_pc =
         pc_factory_->CreatePeerConnectionOrError(config, std::move(deps));
 
-    if (err_or_pc.ok()) {
-        pc_ = err_or_pc.MoveValue();
+    if (!err_or_pc.ok()) {
+        return false;
     }
 
-    return pc_ != nullptr;
+    pc_ = err_or_pc.MoveValue();
+
+    return true;
 }
 
-void PeerClient::deletePeerConnection()
+void PeerClient::delete_peer_connection()
 {
     local_chan_->Close();
     pc_->Close();
@@ -86,43 +145,58 @@ void PeerClient::deletePeerConnection()
         remote_sink_->Stop();
 }
 
-void PeerClient::createTransceivers()
+void PeerClient::create_transceivers()
 {
-    auto transceiver =
-        pc_->AddTransceiver(cricket::MediaType::MEDIA_TYPE_AUDIO);
-    if (!transceiver.ok()) {
-        logger::error("failed to add transceiver: {}",
-                      transceiver.error().message());
-    }
-    transceiver = pc_->AddTransceiver(cricket::MediaType::MEDIA_TYPE_VIDEO);
-    if (!transceiver.ok()) {
-        logger::error("failed to add transceiver: {}",
-                      transceiver.error().message());
+    webrtc::RtpTransceiverInit init;
+    init.direction = webrtc::RtpTransceiverDirection::kRecvOnly;
+
+    if (conf_.enable_audio) {
+        auto transceiver =
+            pc_->AddTransceiver(cricket::MediaType::MEDIA_TYPE_AUDIO, init);
+        if (!transceiver.ok()) {
+            logger::error("failed to add transceiver: {}",
+                          transceiver.error().message());
+        }
     }
 
-    if (remote_sink_) {
-        remote_sink_->Start();
+    {
+        auto transceiver =
+            pc_->AddTransceiver(cricket::MediaType::MEDIA_TYPE_VIDEO, init);
+        if (!transceiver.ok()) {
+            logger::error("failed to add transceiver: {}",
+                          transceiver.error().message());
+        }
+
+        if (remote_sink_) {
+            remote_sink_->Start();
+        }
     }
 }
 
-void PeerClient::createLocalTracks()
+void PeerClient::create_media_tracks()
 {
-    auto audio_src = pc_factory_->CreateAudioSource(cricket::AudioOptions());
-    auto audio_track =
-        pc_factory_->CreateAudioTrack(kAudioLabel, audio_src.get());
-    auto result = pc_->AddTrack(audio_track, {kStreamId});
-    if (!result.ok()) {
-        logger::error("failed to add audio track");
+    if (conf_.enable_audio) {
+        auto audio_src =
+            pc_factory_->CreateAudioSource(cricket::AudioOptions());
+        auto audio_track =
+            pc_factory_->CreateAudioTrack(kAudioLabel, audio_src.get());
+        auto result = pc_->AddTrack(audio_track, {kStreamId});
+        if (!result.ok()) {
+            logger::error("failed to add audio track");
+        }
     }
 
-    if (local_video_src_) {
-        local_video_src_->Start();
-        auto local_video_track = pc_factory_->CreateVideoTrack(
-            kLocalVideoLabel, local_video_src_.get());
-        if (local_sink_) {
-            local_video_track->AddOrUpdateSink(local_sink_.get(),
-                                               rtc::VideoSinkWants());
-            local_sink_->Start();
+    if (conf_.enable_camera) {
+        if (false && local_video_src_) {
+            local_video_src_->Start();
+            auto local_video_track = pc_factory_->CreateVideoTrack(
+                kLocalVideoLabel, local_video_src_.get());
+
+            if (local_sink_) {
+                local_video_track->AddOrUpdateSink(local_sink_.get(),
+                                                   rtc::VideoSinkWants());
+                local_sink_->Start();
+            }
         }
     }
 
@@ -131,16 +205,52 @@ void PeerClient::createLocalTracks()
         // the scoped_refptr version will throw a weird `bad_alloc`, bug?
         auto remote_video_track = pc_factory_->CreateVideoTrack(
             kRemoteVideoLabel, remote_video_src_.get());
-        result = pc_->AddTrack(remote_video_track, {kStreamId});
+        auto result = pc_->AddTrack(remote_video_track, {kStreamId});
         if (!result.ok()) {
             logger::error("failed to add remote video track");
         }
     }
+
+    if (conf_.use_codec) {
+        auto capabilities =
+            pc_factory_->GetRtpSenderCapabilities(cricket::MEDIA_TYPE_VIDEO);
+        logger::debug("supported codecs:");
+        for (auto &codec : capabilities.codecs) {
+            logger::debug("codec: kind={} mime={} name={}", codec.kind,
+                          codec.mime_type(), codec.name);
+        }
+
+        auto &codecs = capabilities.codecs;
+        auto h264cap = std::find_if(
+            codecs.cbegin(), codecs.cend(), [this](const auto &it) {
+                return it.mime_type() == conf_.video_codec;
+            });
+        if (h264cap == codecs.cend()) {
+            return;
+        }
+
+        auto transceivers = pc_->GetTransceivers();
+        auto video_sender = std::find_if(
+            transceivers.cbegin(), transceivers.cend(),
+            [](const rtc::scoped_refptr<webrtc::RtpTransceiverInterface> &it)
+                -> bool {
+                return it->media_type() == cricket::MEDIA_TYPE_VIDEO &&
+                       it->sender() &&
+                       it->sender()->track()->id() == kRemoteVideoLabel;
+            });
+        if (video_sender == transceivers.cend()) {
+            return;
+        }
+        logger::debug("set remote video encoder to h264");
+        std::vector<webrtc::RtpCodecCapability> prefered_codecs = {*h264cap};
+        video_sender->get()->SetCodecPreferences(prefered_codecs);
+    }
 }
 
-void PeerClient::createDataChannel()
+void PeerClient::create_data_channel()
 {
-    webrtc::DataChannelInit config{.protocol = "x11-rdp"};
+    // TODO: split chat/file transport/clipboard/drag-n-drop
+    webrtc::DataChannelInit config{.protocol = "x-remote-input"};
     auto data_chan = pc_->CreateDataChannelOrError(kDataChanId, &config);
     if (data_chan.ok()) {
         local_chan_ = data_chan.value();
@@ -149,22 +259,22 @@ void PeerClient::createDataChannel()
     }
 }
 
-void PeerClient::addLocalVideoSource(VideoSourcePtr src)
+void PeerClient::add_local_video_source(VideoSourcePtr src)
 {
     local_video_src_ = std::move(src);
 }
 
-void PeerClient::addRemoteVideoSource(VideoSourcePtr src)
+void PeerClient::add_remote_video_source(VideoSourcePtr src)
 {
     remote_video_src_ = std::move(src);
 }
 
-void PeerClient::addLocalSinks(VideoSinkPtr sink)
+void PeerClient::add_local_sinks(VideoSinkPtr sink)
 {
     local_sink_ = std::move(sink);
 }
 
-void PeerClient::addRemoteSinks(VideoSinkPtr sink)
+void PeerClient::add_remote_sinks(VideoSinkPtr sink)
 {
     remote_sink_ = std::move(sink);
 }
@@ -202,9 +312,9 @@ void PeerClient::onReady()
     is_caller_ = true;
 
     // we don't send stream as caller
-    createPeerConnection();
-    createTransceivers();
-    createDataChannel();
+    create_peer_connection();
+    create_transceivers();
+    create_data_channel();
 
     assert(pc_->signaling_state() ==
            webrtc::PeerConnectionInterface::SignalingState::kStable);
@@ -217,9 +327,9 @@ void PeerClient::onRemoteOffer(const std::string &sdp)
     logger::debug("got remote offer:\n{}", sdp);
     is_caller_ = false;
 
-    createPeerConnection();
-    createLocalTracks();
-    createDataChannel();
+    create_peer_connection();
+    create_media_tracks();
+    create_data_channel();
 
     assert(pc_->signaling_state() ==
            webrtc::PeerConnectionInterface::SignalingState::kStable);
@@ -232,7 +342,7 @@ void PeerClient::onRemoteOffer(const std::string &sdp)
 
 void PeerClient::onRemoteAnswer(const std::string &sdp)
 {
-    assert(isCaller());
+    assert(is_caller());
     logger::debug("got remote answer:\n{}", sdp);
     assert(pc_->signaling_state() == SignalingState::kHaveLocalOffer);
     webrtc::SdpParseError err;
@@ -261,47 +371,18 @@ void PeerClient::onRemoteCandidate(const std::string &sdp)
     });
 }
 
+// FIXME: ensure close once
 void PeerClient::onRemoteBye()
 {
     logger::debug("remote send a disconnect");
-    deletePeerConnection();
+    delete_peer_connection();
 }
 
+// FIXME: ensure close once
 void PeerClient::onDisconnect()
 {
     logger::debug("disconnect from server and peer");
-    deletePeerConnection();
-}
-
-void PeerClient::SetRemoteSDPCallback::OnSetRemoteDescriptionComplete(
-    webrtc::RTCError error)
-{
-    if (!error.ok()) {
-        logger::error("failed to set remote description: {}", error.message());
-        return;
-    }
-
-    if (!that_->isCaller()) {
-        that_->pc_->SetLocalDescription(SetLocalSDPCallback::Create(that_));
-    }
-}
-
-void PeerClient::SetLocalSDPCallback::OnSetLocalDescriptionComplete(
-    webrtc::RTCError error)
-{
-    if (!error.ok()) {
-        logger::error("failed to set local description: {}", error.message());
-        return;
-    }
-
-    std::string sdp;
-    auto desc = that_->pc_->local_description();
-    desc->ToString(&sdp);
-
-    logger::debug("set local {}:\n{}", desc->type(), sdp);
-
-    auto mt = that_->isCaller() ? MessageType::kOffer : MessageType::kAnswer;
-    that_->signaling_observer_->SendSignal(mt, sdp);
+    delete_peer_connection();
 }
 
 // PeerConnectionObserver impl
@@ -314,7 +395,6 @@ void PeerClient::OnTrack(
     if (track->kind() == webrtc::MediaStreamTrackInterface::kVideoKind) {
         auto video_track = static_cast<webrtc::VideoTrackInterface *>(track);
         if (remote_sink_) {
-            rtc::VideoSinkWants wants;
             video_track->AddOrUpdateSink(remote_sink_.get(),
                                          rtc::VideoSinkWants());
         }
@@ -382,7 +462,7 @@ void PeerClient::OnMessage(const webrtc::DataBuffer &msg)
     mq_->push(PeerClient::ChanMessage{msg.data.data(), msg.size(), msg.binary});
 }
 
-bool PeerClient::postTextMessage(const std::string &text)
+bool PeerClient::post_text_message(const std::string &text)
 {
     if (!local_chan_)
         return false;
@@ -390,7 +470,7 @@ bool PeerClient::postTextMessage(const std::string &text)
     return local_chan_->Send(blob);
 }
 
-bool PeerClient::postBinaryMessage(const uint8_t *data, size_t size)
+bool PeerClient::post_binary_message(const uint8_t *data, size_t size)
 {
     if (!local_chan_)
         return false;
@@ -399,7 +479,7 @@ bool PeerClient::postBinaryMessage(const uint8_t *data, size_t size)
     return local_chan_->Send(blob);
 }
 
-std::optional<PeerClient::ChanMessage> PeerClient::pollRemoteMessage()
+std::optional<PeerClient::ChanMessage> PeerClient::poll_remote_message()
 {
     if (mq_->empty())
         return {};
@@ -409,3 +489,5 @@ std::optional<PeerClient::ChanMessage> PeerClient::pollRemoteMessage()
 
     return m;
 }
+
+void PeerClient::get_stats() { pc_->GetStats(stats_observer_); }

@@ -6,7 +6,6 @@
 #include <chrono>
 #include <exception>
 #include <iostream>
-#include <spdlog/spdlog.h>
 #include <thread>
 #include <utility>
 
@@ -28,7 +27,7 @@ SignalClient::SignalClient(io_context &ctx, Config conf)
 {
 }
 
-SignalClient::~SignalClient() { doLogout(); }
+SignalClient::~SignalClient() { do_logout(); }
 
 void SignalClient::login(const std::string &server, int port)
 {
@@ -67,7 +66,7 @@ awaitable<void> SignalClient::signin(std::string host, int port)
         me_.id = resp[http::field::pragma];
         me_.online = true;
 
-        setPeers(json::parse(resp.body()));
+        set_peers(json::parse(resp.body()));
     } catch (beast::system_error &se) {
         if (se.code() == http::error::end_of_stream) {
             logger::error("login failed: server closed");
@@ -76,14 +75,14 @@ awaitable<void> SignalClient::signin(std::string host, int port)
         } else {
             logger::error("login failed: {}", se.what());
         }
-        doLogout();
+        do_logout();
         co_return;
     }
 
-    co_spawn(ctx_, waitMessage(), detached);
+    co_spawn(ctx_, wait_message(), detached);
 }
 
-awaitable<void> SignalClient::waitMessage()
+awaitable<void> SignalClient::wait_message()
 {
     logger::debug("start wait message thread");
     auto server =
@@ -92,7 +91,7 @@ awaitable<void> SignalClient::waitMessage()
         stream_.expires_never();
         co_await stream_.async_connect(server, use_awaitable);
         while (online()) {
-            co_await handlePendingMessages();
+            co_await handle_pending_messages();
 
             std::string target = "/wait?peer_id=" + me_.id;
             http::request<http::string_body> req{http::verb::get, target, 11};
@@ -109,7 +108,7 @@ awaitable<void> SignalClient::waitMessage()
             /* logger::debug("wait response:\n{}", to_str(resp)); */
             json::object body = json::parse(resp.body()).as_object();
 
-            setPeers(body["peers"]);
+            set_peers(body["peers"]);
 
             if (body["msg"].is_object()) {
                 json::object msg = body["msg"].as_object();
@@ -120,6 +119,9 @@ awaitable<void> SignalClient::waitMessage()
 
                 if (mt == MessageType::kOffer) {
                     current_peer_ = std::move(peer_id);
+                }
+                if (mt == MessageType::kBye) {
+                    current_peer_ = {};
                 }
                 peer_observer_->OnSignal(mt, payload);
             }
@@ -133,26 +135,26 @@ awaitable<void> SignalClient::waitMessage()
         } else {
             logger::error("login failed: {}", se.what());
         }
-        doLogout();
+        do_logout();
         co_return;
     }
 }
 
 awaitable<void> SignalClient::signout()
 {
-    doLogout();
+    do_logout();
     co_return;
 }
 
-void SignalClient::doLogout()
+void SignalClient::do_logout()
 {
     stream_.close();
     wait_timer_.cancel();
     me_.online = false;
 }
 
-awaitable<void> SignalClient::sendMessage(Peer::Id peer_id, std::string payload,
-                                          MessageType mt)
+awaitable<void> SignalClient::send_message(Peer::Id peer_id,
+                                           std::string payload, MessageType mt)
 {
     logger::trace("send to peer [id={}, type={}]", peer_id,
                   MessageTypeToString(mt));
@@ -189,17 +191,17 @@ awaitable<void> SignalClient::sendMessage(Peer::Id peer_id, std::string payload,
     }
 }
 
-awaitable<void> SignalClient::handlePendingMessages()
+awaitable<void> SignalClient::handle_pending_messages()
 {
     // handle pending messages
     while (!pending_messages_.empty()) {
         auto m = pending_messages_.front();
         pending_messages_.pop();
-        co_await sendMessage(m.id, m.payload, m.mt);
+        co_await send_message(m.id, m.payload, m.mt);
     }
 };
 
-void SignalClient::setPeers(const json::value &v)
+void SignalClient::set_peers(const json::value &v)
 {
     json::array peers = v.as_array();
     peers_.clear();
@@ -215,7 +217,7 @@ void SignalClient::setPeers(const json::value &v)
     }
 }
 
-const Peer::List SignalClient::onlinePeers() const
+const Peer::List SignalClient::online_peers() const
 {
     Peer::List online_peers;
     for (auto &p : peers_) {
@@ -226,7 +228,7 @@ const Peer::List SignalClient::onlinePeers() const
     return online_peers;
 };
 
-const Peer::List SignalClient::offlinePeers() const
+const Peer::List SignalClient::offline_peers() const
 {
     Peer::List offline_peers;
     for (auto &p : peers_) {
@@ -243,7 +245,7 @@ void SignalClient::SendSignal(MessageType mt, const std::string &msg)
     pending_messages_.push({current(), mt, msg});
 }
 
-void SignalClient::stopSession()
+void SignalClient::stop_session()
 {
     // bug: sync issues
     SendSignal(MessageType::kBye, "bye");
@@ -251,7 +253,7 @@ void SignalClient::stopSession()
     peer_observer_->OnSignal(MessageType::kLogout, "logout");
 }
 
-void SignalClient::startSession(Peer::Id peer_id)
+void SignalClient::start_session(Peer::Id peer_id)
 {
     current_peer_ = std::move(peer_id);
     peer_observer_->OnSignal(MessageType::kReady, "ready");

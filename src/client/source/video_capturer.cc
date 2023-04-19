@@ -100,6 +100,7 @@ class ScreenCaptureImpl : public rtc::VideoSourceInterface<webrtc::VideoFrame>,
             [sink](const SinkPair &pair) { return pair.sink == sink; });
         if (pair == sinks_.end()) {
             sinks_.emplace_back(sink, wants);
+            logger::debug("new sink added: {}", sinks_.size());
         } else {
             pair->wants = wants;
         }
@@ -107,9 +108,10 @@ class ScreenCaptureImpl : public rtc::VideoSourceInterface<webrtc::VideoFrame>,
 
     void RemoveSink(rtc::VideoSinkInterface<webrtc::VideoFrame> *sink) override
     {
-        sinks_.erase(std::remove_if(
+        std::find_if(
             sinks_.begin(), sinks_.end(),
-            [sink](const SinkPair &pair) { return pair.sink == sink; }));
+            [sink](const SinkPair &pair) { return pair.sink == sink; });
+        logger::debug("sink removed: {}", sinks_.size());
     };
 
     void RequestRefreshFrame() override{};
@@ -119,7 +121,6 @@ class ScreenCaptureImpl : public rtc::VideoSourceInterface<webrtc::VideoFrame>,
                          std::unique_ptr<webrtc::DesktopFrame> frame) override
     {
         static int16_t id = 0;
-        /* logger::debug("OnCaptureResult: "); */
         if (result != webrtc::DesktopCapturer::Result::SUCCESS) {
             return;
         }

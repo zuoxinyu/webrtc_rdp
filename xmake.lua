@@ -52,7 +52,7 @@ target('dezk', function()
     add_syslinks('rt', 'atomic', 'GL', 'GLEW', 'drm')
 
     after_build(function(target)
-        os.exec('scp %s doubleleft@10.10.10.133:/home/doubleleft/', target:targetfile())
+        os.exec('rsync %s notebook:dezk', target:targetfile())
     end)
 
     -- add_deps('webrtc')
@@ -67,7 +67,7 @@ target('signal_server', function()
     add_packages('boost_json', 'boost_url', 'boost_beast', 'spdlog', { configs = { shared = false } })
 
     after_build(function(target)
-        os.exec('scp %s doubleleft@10.10.10.133:/home/doubleleft/', target:targetfile())
+        os.exec('rsync %s notebook:signal_server', target:targetfile())
     end)
 end)
 

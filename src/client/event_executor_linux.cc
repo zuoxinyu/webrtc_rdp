@@ -177,19 +177,30 @@ class X11EventExecutor : public EventExecutor
         case SDL_EventType::SDL_MOUSEWHEEL:
             xdo_click_window(xdo_, CURRENTWINDOW, e.wheel.y > 0 ? 4 : 5);
             break;
-        case SDL_EventType::SDL_TEXTINPUT:
-            xdo_enter_text_window(xdo_, CURRENTWINDOW, &e.text.text[0],
-                                  kDelayMicros);
-            break;
+        // TODO: clipboard support
+        // TODO: input method support
+        /* case SDL_EventType::SDL_TEXTEDITING: */
+        /* case SDL_EventType::SDL_TEXTEDITING_EXT: */
+        /* case SDL_EventType::SDL_TEXTINPUT: */
+        /*     logger::debug("recv textinput: {}", e.text.text); */
+        /*     xdo_enter_text_window(xdo_, CURRENTWINDOW, &e.text.text[0], */
+        /*                           kDelayMicros); */
+        /*     break; */
         case SDL_EventType::SDL_KEYDOWN:
+            logger::trace("recv keydown: {}, translated: {}",
+                          SDL_GetKeyName(e.key.keysym.sym), key_seq);
             translateKeyseq(e, key_seq);
             xdo_send_keysequence_window_down(xdo_, CURRENTWINDOW, &key_seq[0],
                                              kDelayMicros);
+            // FIXME: handle last down event
             break;
         case SDL_EventType::SDL_KEYUP:
             translateKeyseq(e, key_seq);
-            xdo_send_keysequence_window_up(xdo_, CURRENTWINDOW, &key_seq[0],
-                                           kDelayMicros);
+            logger::trace("recv keyup: {}, translated: {}",
+                          SDL_GetKeyName(e.key.keysym.sym), key_seq);
+            // non mod keys only trigger keyup event unless on long pressing
+            xdo_send_keysequence_window(xdo_, CURRENTWINDOW, &key_seq[0],
+                                        kDelayMicros);
             break;
         default:
             break;
@@ -213,19 +224,24 @@ class X11EventExecutor : public EventExecutor
     auto translateKeyseq(const SDL_Event &e, char key_seq[32]) -> void
     {
         std::string seq;
+        /*
         uint16_t mod = e.key.keysym.mod;
         if (mod & KMOD_ALT) {
-            seq += "alt+";
+            seq += "Alt+";
         }
         if (mod & KMOD_SHIFT) {
-            seq += "shift+";
+            seq += "Shift+";
         }
         if (mod & KMOD_CTRL) {
-            seq += "ctrl+";
+            seq += "Ctrl+";
+        }
+        if (mod & KMOD_MODE) {
+            seq += "Meta_L+";
         }
         if (mod & KMOD_CAPS) {
-            // todo
+            // TODO
         }
+        */
         const char *xkey =
             XKeysymToString(SDLScancodeToX11Keysym(e.key.keysym.scancode));
         seq += xkey ? xkey : "";

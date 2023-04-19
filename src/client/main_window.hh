@@ -1,5 +1,6 @@
 #pragma once
 
+#include "client/stats/stats.hh"
 #include "event_executor.hh"
 #include "peer_client.hh"
 #include "signal_client.hh"
@@ -20,6 +21,7 @@ class MainWindow
     ~MainWindow() = default;
 
     void run();
+    void stop();
 
   private:
     // windows
@@ -39,6 +41,7 @@ class MainWindow
     void connect(const Peer::Id &);
     void disconnect();
     void write_chat_message(const std::string &who, const char *buf);
+    void get_stats();
 
   private:
     std::string title_;
@@ -52,9 +55,11 @@ class MainWindow
     rtc::scoped_refptr<ScreenCapturer> remote_video_src_ = nullptr;
     rtc::scoped_refptr<VideoRenderer> local_renderer_ = nullptr;
     rtc::scoped_refptr<VideoRenderer> remote_renderer_ = nullptr;
+    rtc::scoped_refptr<StatsObserver> stats_observer_ = nullptr;
 
     // states
     bool running_ = false;
     char chatbuf_[64000] = {0};
     bool chatbuf_updated_ = false;
+    std::string stats_json_;
 };

@@ -4,6 +4,7 @@
 
 #include <string>
 
+// TODO: pranswer/rollback?
 enum class MessageType {
     kUnknown,
     kReady,

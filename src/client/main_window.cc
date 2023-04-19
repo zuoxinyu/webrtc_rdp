@@ -5,11 +5,13 @@
 #include <cstring>
 #include <thread>
 
-extern "C" {
-#include "microui.h"
-#include "renderer.h"
 #include <SDL2/SDL.h>
+#include <SDL2/SDL_keyboard.h>
 #include <SDL2/SDL_video.h>
+
+extern "C" {
+#include "ui/microui.h"
+#include "ui/renderer.h"
 }
 
 static constexpr auto kWidth = 1920;
@@ -60,16 +62,18 @@ MainWindow::MainWindow(mu_Context *ctx, int argc, char *argv[])
     remote_video_src_ = ScreenCapturer::Create({});
 
     executor_ = EventExecutor::create(remote_renderer_->get_window());
+    stats_observer_ = StatsObserver::Create(stats_json_);
 
-    pc_->setSignalingObserver(cc_.get());
-    cc_->setPeerObserver(pc_.get());
-    pc_->addRemoteVideoSource(remote_video_src_);
-    pc_->addRemoteSinks(remote_renderer_);
+    cc_->set_peer_observer(pc_.get()); // recursive reference?
+    pc_->set_signaling_observer(cc_.get());
+    pc_->set_stats_observer(stats_observer_.get());
+    pc_->add_remote_video_source(remote_video_src_);
+    pc_->add_remote_sinks(remote_renderer_);
     if (CameraCapturer::GetDeviceNum() > 0) {
         local_video_src_ =
             CameraCapturer::Create({.width = 600, .height = 400, .fps = 30});
-        pc_->addLocalVideoSource(local_video_src_);
-        pc_->addLocalSinks(local_renderer_);
+        pc_->add_local_video_source(local_video_src_);
+        pc_->add_local_sinks(local_renderer_);
     }
 }
 
@@ -80,7 +84,7 @@ void MainWindow::login()
     auto port = std::atoi(portbuf);
     auto host = std::string{hostbuf};
 
-    cc_->setName(namebuf);
+    cc_->set_name(namebuf);
     cc_->login(host, port);
 }
 
@@ -90,9 +94,9 @@ void MainWindow::logout()
     cc_->logout();
 }
 
-void MainWindow::connect(const Peer::Id &id) { cc_->startSession(id); }
+void MainWindow::connect(const Peer::Id &id) { cc_->start_session(id); }
 
-void MainWindow::disconnect() { cc_->stopSession(); }
+void MainWindow::disconnect() { cc_->stop_session(); }
 
 void MainWindow::write_chat_message(const std::string &who, const char *buf)
 {
@@ -104,6 +108,14 @@ void MainWindow::write_chat_message(const std::string &who, const char *buf)
     std::strcat(chatbuf_, buf);
     chatbuf_updated_ = true;
 }
+
+void MainWindow::get_stats()
+{
+    if (cc_->calling())
+        pc_->get_stats();
+}
+
+void MainWindow::stop() { running_ = false; }
 
 void MainWindow::run()
 {
@@ -128,7 +140,7 @@ void MainWindow::run()
             ;
         }
 
-        while (pc_ && (msg = pc_->pollRemoteMessage())) {
+        while (pc_ && (msg = pc_->poll_remote_message())) {
             if (msg->binary) {
                 ee.native_ev = *reinterpret_cast<SDL_Event *>(
                     const_cast<uint8_t *>(msg.value().data));
@@ -142,8 +154,7 @@ void MainWindow::run()
 
         while (SDL_PollEvent(&e)) {
             if (e.type == SDL_QUIT) {
-                running_ = false;
-                goto Exit;
+                stop();
             }
 
             if (is_main_event(e)) {
@@ -159,7 +170,6 @@ void MainWindow::run()
 
         ::usleep(12000);
     }
-Exit:;
 }
 
 void MainWindow::process_mu_windows()
@@ -181,7 +191,7 @@ void MainWindow::chat_window(mu_Context *ctx)
 {
     std::string title = "Chat vs " + cc_->peer().name;
 
-    if (mu_begin_window(ctx, title.c_str(), mu_rect(400, 300, 600, 400))) {
+    if (mu_begin_window(ctx, title.c_str(), mu_rect(400, 0, 800, 800))) {
         mu_layout_row(ctx, 1, (int[]){-1}, -25);
         mu_begin_panel(ctx, "Log Output");
         mu_Container *panel = mu_get_current_container(ctx);
@@ -206,7 +216,7 @@ void MainWindow::chat_window(mu_Context *ctx)
         }
         if (submitted) {
             write_chat_message(cc_->name(), buf);
-            pc_->postTextMessage(buf);
+            pc_->post_text_message(buf);
             buf[0] = '\0';
         }
 
@@ -216,11 +226,14 @@ void MainWindow::chat_window(mu_Context *ctx)
 
 void MainWindow::peers_window(mu_Context *ctx)
 {
-    if (mu_begin_window(ctx, "Online Peers", mu_rect(0, 40, 300, 200))) {
+    static int voice_enabled = 0;
+    static int camera_enabled = 0;
+
+    if (mu_begin_window(ctx, "Online Peers", mu_rect(0, 0, 400, 800))) {
         if (mu_header_ex(ctx, "Online Peers", MU_OPT_EXPANDED)) {
             int ws[3] = {-80, -40, -1};
             mu_layout_row(ctx, 3, ws, 30);
-            for (auto &pair : cc_->onlinePeers()) {
+            for (auto &pair : cc_->online_peers()) {
                 mu_label(ctx, pair.second.name.c_str());
                 mu_label(ctx, pair.second.id.c_str());
                 auto id = pair.second.id;
@@ -243,7 +256,7 @@ void MainWindow::peers_window(mu_Context *ctx)
         if (mu_header_ex(ctx, "Offline Peers", MU_OPT_EXPANDED)) {
             int ws[2] = {-80, -1};
             mu_layout_row(ctx, 2, ws, 30);
-            for (auto &pair : cc_->offlinePeers()) {
+            for (auto &pair : cc_->offline_peers()) {
                 mu_label(ctx, pair.second.name.c_str());
                 mu_label(ctx, pair.second.id.c_str());
             }
@@ -252,15 +265,26 @@ void MainWindow::peers_window(mu_Context *ctx)
         int bws[2] = {60, 60};
         mu_layout_row(ctx, 2, bws, 25);
         if (mu_button(ctx, "Exit")) {
-            running_ = false;
+            stop();
         }
+
+        if (mu_button(ctx, "Stats")) {
+            get_stats();
+        }
+
+        if (mu_checkbox(ctx, "voice", &voice_enabled)) {
+        }
+
+        if (mu_checkbox(ctx, "camera", &camera_enabled)) {
+        }
+
         mu_end_window(ctx);
     }
 }
 
 void MainWindow::login_window(mu_Context *ctx)
 {
-    if (mu_begin_window(ctx, "Login", mu_rect(0, 40, 300, 200))) {
+    if (mu_begin_window(ctx, "Login", mu_rect(450, 300, 300, 200))) {
         int ws[2] = {-240, -1};
         int submit = 0;
         mu_layout_row(ctx, 2, ws, 25);
@@ -289,7 +313,7 @@ void MainWindow::login_window(mu_Context *ctx)
         }
 
         if (mu_button(ctx, "Exit")) {
-            running_ = false;
+            stop();
         }
 
         if (submit || auto_login_) {
@@ -306,7 +330,7 @@ void MainWindow::handle_main_event(const SDL_Event &e)
     case SDL_WINDOWEVENT:
         switch (e.window.type) {
         case SDL_WINDOWEVENT_CLOSE:
-            running_ = false;
+            stop();
             break;
         }
         break;
@@ -373,5 +397,6 @@ void MainWindow::handle_remote_event(const SDL_Event &e)
 {
     SDL_Event ev = e;
     // TODO: handle failure
-    pc_->postBinaryMessage(reinterpret_cast<const uint8_t *>(&ev), sizeof(ev));
+    pc_->post_binary_message(reinterpret_cast<const uint8_t *>(&ev),
+                             sizeof(ev));
 }

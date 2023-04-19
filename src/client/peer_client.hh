@@ -3,6 +3,7 @@
 #include "callbacks.hh"
 #include "sink/video_sink.hh"
 #include "source/video_source.hh"
+#include "stats/stats.hh"
 
 #include <memory>
 
@@ -19,10 +20,12 @@ struct PeerClient : private webrtc::PeerConnectionObserver,
                     public PeerObserver {
 
   public:
-    struct ChanMessage;
-    using VideoSourcePtr = rtc::scoped_refptr<VideoSource>;
-    using VideoSinkPtr = rtc::scoped_refptr<VideoSink>;
-    using MessageQueue = std::queue<ChanMessage>;
+    struct Config {
+        bool use_codec;
+        std::string video_codec;
+        bool enable_audio;
+        bool enable_camera;
+    };
 
     struct ChanMessage {
         const uint8_t *data;
@@ -30,59 +33,43 @@ struct PeerClient : private webrtc::PeerConnectionObserver,
         bool binary;
     };
 
-    struct SetRemoteSDPCallback
-        : public webrtc::SetRemoteDescriptionObserverInterface {
-        static rtc::scoped_refptr<SetRemoteSDPCallback> Create(PeerClient *that)
-        {
-            return rtc::make_ref_counted<SetRemoteSDPCallback>(that);
-        }
-        void OnSetRemoteDescriptionComplete(webrtc::RTCError error) override;
+    using VideoSourcePtr = rtc::scoped_refptr<VideoSource>;
+    using VideoSinkPtr = rtc::scoped_refptr<VideoSink>;
+    using MessageQueue = std::queue<ChanMessage>;
 
-        PeerClient *that_;
-        SetRemoteSDPCallback(PeerClient *that) : that_(that) {}
-    };
-
-    struct SetLocalSDPCallback
-        : public webrtc::SetLocalDescriptionObserverInterface {
-        static rtc::scoped_refptr<SetLocalSDPCallback> Create(PeerClient *that)
-        {
-            return rtc::make_ref_counted<SetLocalSDPCallback>(that);
-        }
-        void OnSetLocalDescriptionComplete(webrtc::RTCError error) override;
-
-        PeerClient *that_;
-        SetLocalSDPCallback(PeerClient *that) : that_(that) {}
-    };
     friend struct SetRemoteSDPCallback;
     friend struct SetLocalSDPCallback;
 
   public:
-    PeerClient();
+    PeerClient(Config conf = {false, "video/VP8"});
     ~PeerClient() override;
 
     // external resources about
-    void addLocalVideoSource(VideoSourcePtr);
-    void addRemoteVideoSource(VideoSourcePtr);
-    void addLocalSinks(VideoSinkPtr);
-    void addRemoteSinks(VideoSinkPtr);
-    void setSignalingObserver(SignalingObserver *ob)
+    void add_local_video_source(VideoSourcePtr);
+    void add_remote_video_source(VideoSourcePtr);
+    void add_local_sinks(VideoSinkPtr);
+    void add_remote_sinks(VideoSinkPtr);
+    void set_signaling_observer(SignalingObserver *ob)
     {
         signaling_observer_ = ob;
     }
+    void set_stats_observer(StatsObserver *ob) { stats_observer_ = ob; }
     // states
-    bool isCaller() const { return is_caller_; }
+    bool is_caller() const { return is_caller_; }
     // channel messaging, TODO: abastract interface
-    bool postTextMessage(const std::string &text);
-    bool postBinaryMessage(const uint8_t *data, size_t size);
-    std::optional<ChanMessage> pollRemoteMessage();
+    bool post_text_message(const std::string &text);
+    bool post_binary_message(const uint8_t *data, size_t size);
+    std::optional<ChanMessage> poll_remote_message();
+    // stats
+    void get_stats();
 
   private:
     // internal resources about
-    bool createPeerConnection();
-    void deletePeerConnection();
-    void createTransceivers();
-    void createLocalTracks();
-    void createDataChannel();
+    bool create_peer_connection();
+    void delete_peer_connection();
+    void create_transceivers();
+    void create_media_tracks();
+    void create_data_channel();
 
     // signaling about
     void onReady();
@@ -125,17 +112,19 @@ struct PeerClient : private webrtc::PeerConnectionObserver,
     VideoSinkPtr local_sink_ = nullptr;
     VideoSinkPtr remote_sink_ = nullptr;
     SignalingObserver *signaling_observer_ = nullptr;
+    StatsObserver *stats_observer_ = nullptr;
     // internal resources
     rtc::scoped_refptr<webrtc::PeerConnectionFactoryInterface> pc_factory_ =
         nullptr;
+    // TODO: multiple pc instances support?
     rtc::scoped_refptr<webrtc::PeerConnectionInterface> pc_ = nullptr;
     rtc::scoped_refptr<webrtc::DataChannelInterface> local_chan_ = nullptr;
     rtc::scoped_refptr<webrtc::DataChannelInterface> remote_chan_ = nullptr;
     std::unique_ptr<rtc::Thread> signaling_thread_ = nullptr;
-
     std::unique_ptr<MessageQueue> mq_;
 
     // states
     // TODO: perfect negotiation (e.g. use `polite peer` strategy)
     bool is_caller_;
+    Config conf_;
 };

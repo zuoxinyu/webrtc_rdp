@@ -41,10 +41,10 @@ class Window : public Component
 
   public:
     Window(Context ctx) : Component(ctx) {}
-    virtual ~Window() = 0;
+    ~Window() override = 0;
 
     virtual void render_content() = 0;
-    virtual void render()
+    void render() override
     {
         if (mu_begin_window_ex(ctx_, title_.c_str(), rect_, opt_)) {
             render_content();
@@ -59,7 +59,7 @@ class Popup : public Component
 
   public:
     Popup(Context ctx) : Component(ctx) {}
-    virtual ~Popup() = 0;
+    ~Popup() override = 0;
 };
 
 class Label : public Component

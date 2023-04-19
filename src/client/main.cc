@@ -12,8 +12,8 @@
 #include <spdlog/spdlog.h>
 
 extern "C" {
-#include "microui.h"
-#include "renderer.h"
+#include "ui/microui.h"
+#include "ui/renderer.h"
 #include <SDL2/SDL.h>
 }
 
