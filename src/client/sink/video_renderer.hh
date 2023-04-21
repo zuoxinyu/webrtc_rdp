@@ -17,12 +17,12 @@
 struct VideoRenderer : VideoSink {
   public:
     struct Config {
-        std::string name;
-        int width;
-        int height;
-        bool use_opengl;
-        bool dump;
-        bool hide;
+        std::string name = "video sink window";
+        int width = 800;
+        int height = 600;
+        bool use_opengl = false;
+        bool dump = false;
+        bool hide = true;
     };
 
   public:

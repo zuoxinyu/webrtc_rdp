@@ -6,7 +6,7 @@
 #include "signal_client.hh"
 #include "sink/video_renderer.hh"
 #include "source/camera_capturer.hh"
-#include "source/video_capturer.hh"
+#include "source/screen_capturer.hh"
 
 #include <memory>
 #include <string>

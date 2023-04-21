@@ -1,4 +1,4 @@
-#include "video_capturer.hh"
+#include "screen_capturer.hh"
 #include "logger.hh"
 
 #include <algorithm>

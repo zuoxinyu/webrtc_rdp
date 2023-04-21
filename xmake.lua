@@ -27,7 +27,8 @@ local gn_args = {
     'use_debug_fission=true', -- -gsplit-dwarf
     'use_custom_libcxx=false',
     'use_rtti=true',          -- typeinfo
-    'rtc_use_h264=true',
+    'rtc_use_h264=false',
+    -- 'ffmpeg_branding=\"Chrome\"',
     'rtc_include_tests=false',
     'rtc_enable_protobuf=false',
     'rtc_enable_symbol_export=true',
@@ -54,6 +55,7 @@ target('dezk', function()
     add_files('src/client/**.cc', 'src/client/**.c')
 
     add_packages('boost_json', 'boost_url', 'boost_beast', 'spdlog', 'SDL2')
+    add_syslinks('avcodec', 'avutil', 'avformat')
     add_linkdirs(webrtc_obj_dir)
     add_links('webrtc')
 
@@ -145,4 +147,3 @@ task('echo-cmd', function()
         description = 'show webrtc build commands',
     }
 end)
-

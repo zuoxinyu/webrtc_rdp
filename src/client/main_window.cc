@@ -14,20 +14,17 @@ extern "C" {
 #include "ui/renderer.h"
 }
 
-static constexpr auto kWidth = 1920;
-static constexpr auto kHeight = 1200;
-static const VideoRenderer::Config local_opts = {.name = "local camera video",
+static const VideoRenderer::Config local_opts = {.name = "camera video",
                                                  .width = 600,
                                                  .height = 400,
                                                  .use_opengl = false,
                                                  .dump = false,
                                                  .hide = true};
-static const VideoRenderer::Config remote_opts = {.name =
-                                                      "remote desktop video",
-                                                  .width = kWidth,
-                                                  .height = kHeight,
+static const VideoRenderer::Config remote_opts = {.name = "remote desktop",
+                                                  .width = 1920,
+                                                  .height = 1200,
                                                   .use_opengl = false,
-                                                  .dump = false,
+                                                  .dump = true,
                                                   .hide = true};
 
 static char hostbuf[16] = "127.0.0.1";

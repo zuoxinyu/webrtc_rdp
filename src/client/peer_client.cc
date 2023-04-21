@@ -1,4 +1,7 @@
 #include "peer_client.hh"
+#include "api/video_codecs/video_encoder_factory.h"
+#include "client/codec/decoder/factory.hh"
+#include "client/codec/encoder/factory.hh"
 #include "logger.hh"
 
 #include <memory>
@@ -14,6 +17,7 @@
 #include "api/video/video_sink_interface.h"
 #include "api/video_codecs/builtin_video_decoder_factory.h"
 #include "api/video_codecs/builtin_video_encoder_factory.h"
+#include "api/video_codecs/video_encoder_factory_template.h"
 #include "rtc_base/thread.h"
 
 static const std::string kDefaultSTUNServer = "stun:stun1.l.google.com:19302";
@@ -83,12 +87,18 @@ PeerClient::PeerClient(Config conf) : conf_(std::move(conf))
     signaling_thread_ = rtc::Thread::CreateWithSocketServer();
     signaling_thread_->Start();
 
+    std::unique_ptr<webrtc::VideoEncoderFactory> encoder_factory =
+        std::make_unique<CustomVideoEncoderFactory>();
+    std::unique_ptr<webrtc::VideoDecoderFactory> decoder_factory =
+        std::make_unique<CustomVideoDecoderFactory>();
+
     pc_factory_ = webrtc::CreatePeerConnectionFactory(
         nullptr, nullptr, signaling_thread_.get(), nullptr,
         webrtc::CreateBuiltinAudioEncoderFactory(),
         webrtc::CreateBuiltinAudioDecoderFactory(),
-        webrtc::CreateBuiltinVideoEncoderFactory(),
-        webrtc::CreateBuiltinVideoDecoderFactory(), nullptr, nullptr);
+        std::move(encoder_factory), //
+        std::move(decoder_factory), //
+        nullptr, nullptr);
 
     webrtc::PeerConnectionFactoryInterface::Options factory_opts;
     // disable_encryption would make data_channel create failed, bug?
@@ -220,19 +230,18 @@ void PeerClient::create_media_tracks()
         }
 
         auto &codecs = capabilities.codecs;
-        auto h264cap = std::find_if(
-            codecs.cbegin(), codecs.cend(), [this](const auto &it) {
-                return it.mime_type() == conf_.video_codec;
-            });
-        if (h264cap == codecs.cend()) {
+        auto cap = std::find_if(codecs.cbegin(), codecs.cend(),
+                                [this](const auto &it) {
+                                    return it.mime_type() == conf_.video_codec;
+                                });
+        if (cap == codecs.cend()) {
             return;
         }
 
         auto transceivers = pc_->GetTransceivers();
         auto video_sender = std::find_if(
             transceivers.cbegin(), transceivers.cend(),
-            [](const rtc::scoped_refptr<webrtc::RtpTransceiverInterface> &it)
-                -> bool {
+            [](const auto &it) -> bool {
                 return it->media_type() == cricket::MEDIA_TYPE_VIDEO &&
                        it->sender() &&
                        it->sender()->track()->id() == kScreenVideoLabel;
@@ -240,8 +249,8 @@ void PeerClient::create_media_tracks()
         if (video_sender == transceivers.cend()) {
             return;
         }
-        logger::debug("set remote video encoder to h264");
-        std::vector<webrtc::RtpCodecCapability> prefered_codecs = {*h264cap};
+        logger::debug("set remote video encoder to {}", conf_.video_codec);
+        std::vector<webrtc::RtpCodecCapability> prefered_codecs = {*cap};
         video_sender->get()->SetCodecPreferences(prefered_codecs);
     }
 }

@@ -21,12 +21,12 @@ struct PeerClient : private webrtc::PeerConnectionObserver,
 
   public:
     struct Config {
-        Config() {}
+        Config() { ; }
         Config(const Config &) = default;
         Config(Config &&) = default;
         Config &operator=(const Config &) = default;
         Config &operator=(Config &&) = default;
-        bool use_codec = false;
+        bool use_codec = true;
         std::string video_codec = "video/H264";
         bool enable_chat = true;
         bool enable_audio = false;
