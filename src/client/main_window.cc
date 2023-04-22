@@ -24,7 +24,7 @@ static const VideoRenderer::Config remote_opts = {.name = "remote desktop",
                                                   .width = 1920,
                                                   .height = 1200,
                                                   .use_opengl = false,
-                                                  .dump = true,
+                                                  .dump = false,
                                                   .hide = true};
 
 static char hostbuf[16] = "127.0.0.1";

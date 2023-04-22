@@ -13,6 +13,7 @@ class FFMPEGEncoder : public webrtc::VideoEncoder
 {
   public:
     const char *kDeviceVAAPI = "h264_vaapi";
+    const char *kDeviceX264 = "libx264";
 
   public:
     FFMPEGEncoder(const webrtc::SdpVideoFormat &format);
@@ -52,4 +53,5 @@ class FFMPEGEncoder : public webrtc::VideoEncoder
     AVBufferRef *device_ctx_ = nullptr;
     int width_ = 0;
     int height_ = 0;
+    bool hwac_ = true;
 };

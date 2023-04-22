@@ -32,6 +32,8 @@ class FFMPEGDecoder : public webrtc::VideoDecoder
 
   private:
     int set_hwframe_ctx(AVCodecContext *ctx, AVBufferRef *hw_device_ctx);
+    int do_decode(const webrtc::EncodedImage &image,
+                      int64_t render_time_ms);
 
   private:
     // external resources

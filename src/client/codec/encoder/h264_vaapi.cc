@@ -56,9 +56,11 @@ int FFMPEGEncoder::InitEncode(const webrtc::VideoCodec *codec_settings,
     width_ = codec_settings->width;
     height_ = codec_settings->height;
 
-    codec_ = avcodec_find_encoder_by_name(kDeviceVAAPI);
+    auto device = hwac_ ? kDeviceVAAPI : kDeviceX264;
+
+    codec_ = avcodec_find_encoder_by_name(device);
     if (!codec_) {
-        logger::error("failed to find hardware encoder: {}", kDeviceVAAPI);
+        logger::error("failed to find  encoder: {}", device);
         return WEBRTC_VIDEO_CODEC_ERROR;
     }
 
@@ -70,7 +72,7 @@ int FFMPEGEncoder::InitEncode(const webrtc::VideoCodec *codec_settings,
 
     avctx_->width = width_;
     avctx_->height = height_;
-    avctx_->pix_fmt = AV_PIX_FMT_VAAPI;
+    avctx_->pix_fmt = hwac_ ? AV_PIX_FMT_VAAPI : AV_PIX_FMT_YUV420P;
     avctx_->framerate =
         AVRational{static_cast<int>(codec_settings->maxFramerate), 1};
     avctx_->time_base = av_inv_q(avctx_->framerate);
@@ -80,21 +82,24 @@ int FFMPEGEncoder::InitEncode(const webrtc::VideoCodec *codec_settings,
     avctx_->rc_max_rate = codec_settings->maxBitrate * 1000;
     avctx_->rc_min_rate = codec_settings->minBitrate * 1000;
     avctx_->global_quality = 20; // ?
-    av_opt_set(avctx_->priv_data, "rc_mode", "CQP", 0);
+    // constant quality
 
     int ret;
-    ret = av_hwdevice_ctx_create(&device_ctx_, AV_HWDEVICE_TYPE_VAAPI, nullptr,
-                                 nullptr, 0);
-    if (ret < 0) {
-        logger::error("failed to create hardware device context: {}",
-                      av_err2str(ret));
-        return WEBRTC_VIDEO_CODEC_ERROR;
-    }
-    ret = set_hwframe_ctx(avctx_, device_ctx_);
-    if (ret < 0) {
-        logger::error("failed to create hardware frame context: {}",
-                      av_err2str(ret));
-        return WEBRTC_VIDEO_CODEC_ERROR;
+    if (hwac_) {
+        av_opt_set(avctx_->priv_data, "rc_mode", "CQP", 0);
+        ret = av_hwdevice_ctx_create(&device_ctx_, AV_HWDEVICE_TYPE_VAAPI,
+                                     nullptr, nullptr, 0);
+        if (ret < 0) {
+            logger::error("failed to create hardware device context: {}",
+                          av_err2str(ret));
+            return WEBRTC_VIDEO_CODEC_ERROR;
+        }
+        ret = set_hwframe_ctx(avctx_, device_ctx_);
+        if (ret < 0) {
+            logger::error("failed to create hardware frame context: {}",
+                          av_err2str(ret));
+            return WEBRTC_VIDEO_CODEC_ERROR;
+        }
     }
 
     ret = avcodec_open2(avctx_, codec_, nullptr);
@@ -106,9 +111,8 @@ int FFMPEGEncoder::InitEncode(const webrtc::VideoCodec *codec_settings,
     swframe_ = av_frame_alloc();
     hwframe_ = av_frame_alloc();
     packet_ = av_packet_alloc();
-
-    swframe_->width = width_;
-    swframe_->height = height_;
+    hwframe_->width = swframe_->width = width_;
+    hwframe_->height = swframe_->height = height_;
     swframe_->format = AV_PIX_FMT_YUV420P;
     ret = av_frame_get_buffer(swframe_, 0);
     if (ret < 0) {
@@ -117,14 +121,16 @@ int FFMPEGEncoder::InitEncode(const webrtc::VideoCodec *codec_settings,
         return WEBRTC_VIDEO_CODEC_ERROR;
     }
 
-    ret = av_hwframe_get_buffer(avctx_->hw_frames_ctx, hwframe_, 0);
-    if (ret < 0) {
-        logger::error("failed to alloc hardware frame buffer: {}",
-                      av_err2str(ret));
-        return WEBRTC_VIDEO_CODEC_MEMORY;
+    if (hwac_) {
+        ret = av_hwframe_get_buffer(avctx_->hw_frames_ctx, hwframe_, 0);
+        if (ret < 0 || !hwframe_->hw_frames_ctx) {
+            logger::error("failed to alloc hardware frame buffer: {}",
+                          av_err2str(ret));
+            return WEBRTC_VIDEO_CODEC_MEMORY;
+        }
     }
 
-    {
+    if (hwac_) {
         AVPixelFormat *fmts;
         int ret = av_hwframe_transfer_get_formats(
             hwframe_->hw_frames_ctx, AV_HWFRAME_TRANSFER_DIRECTION_TO, &fmts,
@@ -134,10 +140,9 @@ int FFMPEGEncoder::InitEncode(const webrtc::VideoCodec *codec_settings,
             return WEBRTC_VIDEO_CODEC_ERROR;
         }
 
-        int i = 0;
-        for (AVPixelFormat f = fmts[i]; f != AV_PIX_FMT_NONE; f = fmts[++i]) {
+        for (AVPixelFormat *f = fmts; *f != AV_PIX_FMT_NONE; f++) {
             logger::info("supported hardware frame source fmt: {}",
-                         av_get_pix_fmt_name(f));
+                         av_get_pix_fmt_name(*f));
         }
         av_free(fmts);
     }
@@ -151,15 +156,18 @@ FFMPEGEncoder::Encode(const webrtc::VideoFrame &frame,
                       const std::vector<webrtc::VideoFrameType> *frame_types)
 {
     int ret;
+    AVFrame *inframe = swframe_;
     intoAVFrame(swframe_, frame);
-    ret = av_hwframe_transfer_data(hwframe_, swframe_, 0);
-    if (ret < 0) {
-        logger::error("failed to transfer to hardware frame buffer: {}",
-                      av_err2str(ret));
-        return WEBRTC_VIDEO_CODEC_MEMORY;
+    if (hwac_) {
+        inframe = hwframe_;
+        ret = av_hwframe_transfer_data(hwframe_, swframe_, 0);
+        if (ret < 0) {
+            logger::error("failed to transfer to hardware frame buffer: {}",
+                          av_err2str(ret));
+            return WEBRTC_VIDEO_CODEC_MEMORY;
+        }
     }
-
-    ret = avcodec_send_frame(avctx_, hwframe_);
+    ret = avcodec_send_frame(avctx_, inframe);
     if (ret == AVERROR(EAGAIN)) {
         callback_->OnDroppedFrame(
             webrtc::EncodedImageCallback::DropReason::kDroppedByEncoder);
@@ -201,7 +209,7 @@ webrtc::VideoEncoder::EncoderInfo FFMPEGEncoder::GetEncoderInfo() const
     info.implementation_name = "h264_hw_encoder";
     info.supports_simulcast = false;
     info.preferred_pixel_formats = {webrtc::VideoFrameBuffer::Type::kI420};
-    info.is_hardware_accelerated = true;
+    info.is_hardware_accelerated = hwac_;
 
     return info;
 }
@@ -241,6 +249,7 @@ int FFMPEGEncoder::intoEncodedImage(webrtc::EncodedImage &image,
     image.ntp_time_ms_ = frame.ntp_time_ms();
     image.capture_time_ms_ = frame.render_time_ms();
     image.rotation_ = frame.rotation();
+    image.content_type_ = webrtc::VideoContentType::SCREENSHARE;
     image.SetTimestamp(frame.timestamp());
     image.SetColorSpace(frame.color_space());
 
@@ -259,7 +268,7 @@ int FFMPEGEncoder::set_hwframe_ctx(AVCodecContext *ctx, AVBufferRef *device_ctx)
     }
     frames_ctx = (AVHWFramesContext *)(hw_frames_ref->data);
     frames_ctx->format = AV_PIX_FMT_VAAPI;
-    frames_ctx->sw_format = AV_PIX_FMT_YUV420P;
+    frames_ctx->sw_format = AV_PIX_FMT_NV12;
     frames_ctx->width = width_;
     frames_ctx->height = height_;
     frames_ctx->initial_pool_size = 20;
