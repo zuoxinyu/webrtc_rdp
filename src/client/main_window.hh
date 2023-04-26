@@ -49,6 +49,8 @@ class MainWindow
     std::string title_;
     bool auto_login_ = false;
     mu_Context *ctx_ = nullptr;
+    PeerClient::Config pc_conf_;
+
     boost::asio::io_context ioctx_;
     std::unique_ptr<SignalClient> cc_ = nullptr;
     std::unique_ptr<PeerClient> pc_ = nullptr;

@@ -15,7 +15,7 @@ class VideoSource : public webrtc::VideoTrackSourceInterface
     SourceState state() const override { return state_; }
     bool remote() const override { return remote_; }
 
-    bool is_screencast() const override { return false; }
+    bool is_screencast() const override { return true; }
     absl::optional<bool> needs_denoising() const override
     {
         return absl::nullopt;

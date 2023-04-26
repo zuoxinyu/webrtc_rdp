@@ -22,12 +22,8 @@ struct PeerClient : private webrtc::PeerConnectionObserver,
   public:
     struct Config {
         Config() { ; }
-        Config(const Config &) = default;
-        Config(Config &&) = default;
-        Config &operator=(const Config &) = default;
-        Config &operator=(Config &&) = default;
         bool use_codec = true;
-        std::string video_codec = "video/H264";
+        std::string video_codec = "video/VP9";
         bool enable_chat = true;
         bool enable_audio = false;
         bool enable_screen = true;
@@ -124,17 +120,19 @@ struct PeerClient : private webrtc::PeerConnectionObserver,
     SignalingObserver *signaling_observer_ = nullptr;
     StatsObserver *stats_observer_ = nullptr;
     // internal resources
+    // must before `pc_factory_`, due to destruction order
+    std::unique_ptr<rtc::Thread> signaling_thread_ = nullptr;
     rtc::scoped_refptr<webrtc::PeerConnectionFactoryInterface> pc_factory_ =
         nullptr;
     // TODO: multiple pc instances support?
     rtc::scoped_refptr<webrtc::PeerConnectionInterface> pc_ = nullptr;
     rtc::scoped_refptr<webrtc::DataChannelInterface> local_chan_ = nullptr;
     rtc::scoped_refptr<webrtc::DataChannelInterface> remote_chan_ = nullptr;
-    std::unique_ptr<rtc::Thread> signaling_thread_ = nullptr;
     std::unique_ptr<MessageQueue> mq_;
 
     // states
     // TODO: perfect negotiation (e.g. use `polite peer` strategy)
     bool is_caller_;
     Config conf_;
+    std::vector<webrtc::RtpCodecCapability> prefered_codecs_;
 };

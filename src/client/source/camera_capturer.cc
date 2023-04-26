@@ -10,18 +10,7 @@ class CameraCapturerImpl : public rtc::VideoSourceInterface<webrtc::VideoFrame>
   public:
     CameraCapturerImpl(const CameraCapturer::Config &conf)
     {
-        auto device_info = webrtc::VideoCaptureFactory::CreateDeviceInfo();
-        char device_name[256];
-        char device_uniq[256];
-        auto ndev = device_info->NumberOfDevices();
-        logger::debug("device number: {}", ndev);
-        for (auto i = 0; i < ndev; i++) {
-            device_info->GetDeviceName(i, device_name, 256, device_uniq, 256);
-            logger::debug("device[{}]: {}, {}", i, device_name, device_uniq);
-        }
-        assert(ndev > 0);
-        device_info->GetDeviceName(0, device_name, 256, device_uniq, 256);
-        vcm_ = webrtc::VideoCaptureFactory::Create(device_uniq);
+        vcm_ = webrtc::VideoCaptureFactory::Create(conf.uniq);
     }
     ~CameraCapturerImpl() override = default;
 
@@ -64,12 +53,6 @@ rtc::scoped_refptr<CameraCapturer> CameraCapturer::Create(Config conf)
     return rtc::make_ref_counted<CameraCapturer>(conf);
 }
 
-size_t CameraCapturer::GetDeviceNum()
-{
-    auto device_info = webrtc::VideoCaptureFactory::CreateDeviceInfo();
-    return device_info->NumberOfDevices();
-}
-
 CameraCapturer::CameraCapturer(CameraCapturer::Config conf) : VideoSource(false)
 {
     source_ = std::make_unique<CameraCapturerImpl>(conf);
@@ -85,4 +68,18 @@ void CameraCapturer::Stop()
 {
     SetState(SourceState::kEnded);
     static_cast<CameraCapturerImpl *>(source_.get())->stop();
+}
+
+CameraCapturer::DeviceList CameraCapturer::GetDeviceList()
+{
+    auto device_info = webrtc::VideoCaptureFactory::CreateDeviceInfo();
+    char device_name[256];
+    char device_uniq[256];
+    auto ndev = device_info->NumberOfDevices();
+    std::vector<std::pair<std::string, std::string>> devices;
+    for (auto i = 0; i < ndev; i++) {
+        device_info->GetDeviceName(i, device_name, 256, device_uniq, 256);
+        devices.emplace_back(device_name, device_uniq);
+    }
+    return devices;
 }

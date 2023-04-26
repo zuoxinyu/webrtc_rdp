@@ -29,11 +29,11 @@ class FFMPEGDecoder : public webrtc::VideoDecoder
 
     int32_t Decode(const webrtc::EncodedImage &frame, bool missing_frames,
                    int64_t render_time_ms) override;
+    DecoderInfo GetDecoderInfo() const override;
 
   private:
     int set_hwframe_ctx(AVCodecContext *ctx, AVBufferRef *hw_device_ctx);
-    int do_decode(const webrtc::EncodedImage &image,
-                      int64_t render_time_ms);
+    int do_decode(const webrtc::EncodedImage &image, int64_t render_time_ms);
 
   private:
     // external resources

@@ -13,7 +13,11 @@ extern "C" {
 #include "modules/video_coding/include/video_error_codes.h"
 #include "rtc_base/time_utils.h"
 
-FFMPEGDecoder::FFMPEGDecoder(const webrtc::SdpVideoFormat &format) {}
+FFMPEGDecoder::FFMPEGDecoder(const webrtc::SdpVideoFormat &format)
+{
+    logger::debug("create decoder, format: {}", format.ToString());
+    // TODO: parse profile/level
+}
 
 FFMPEGDecoder::~FFMPEGDecoder() { Release(); }
 
@@ -112,4 +116,12 @@ int FFMPEGDecoder::do_decode(const webrtc::EncodedImage &image,
     }
 
     return WEBRTC_VIDEO_CODEC_OK;
+}
+
+webrtc::VideoDecoder::DecoderInfo FFMPEGDecoder::GetDecoderInfo() const
+{
+    DecoderInfo info;
+    info.implementation_name = "h264_ffmpeg_decoder";
+    info.is_hardware_accelerated = false;
+    return info;
 }

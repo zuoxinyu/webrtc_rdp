@@ -24,8 +24,8 @@ class StatsObserver : public webrtc::RTCStatsCollectorCallback
     {
         auto json = report->ToJson();
 
-        dump_section(json, "outbound-rtp");
         json_ = dump_section(json, "inbound-rtp");
+        json_ += dump_section(json, "outbound-rtp");
     }
 
     static std::string dump_section(const std::string &json,

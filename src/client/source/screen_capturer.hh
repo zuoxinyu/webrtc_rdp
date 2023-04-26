@@ -12,6 +12,10 @@
 struct ScreenCapturer : public VideoSource {
   public:
     struct Config {
+        int fps = 60;
+        int width = 0;
+        int height = 0;
+        bool keep_ratio = true;
         std::vector<webrtc::WindowId> exlude_window_id;
     };
 

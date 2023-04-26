@@ -14,13 +14,15 @@ struct CameraCapturer : public VideoSource {
         int width;
         int height;
         int fps;
+        const char *uniq;
     };
+    using DeviceList = std::vector<std::pair<std::string, std::string>>;
 
   public:
     CameraCapturer(Config conf);
     ~CameraCapturer() override = default;
 
-    static size_t GetDeviceNum();
+    static DeviceList GetDeviceList();
     static rtc::scoped_refptr<CameraCapturer> Create(Config conf);
 
   public:

@@ -26,6 +26,11 @@ static const VideoRenderer::Config remote_opts = {.name = "remote desktop",
                                                   .use_opengl = false,
                                                   .dump = false,
                                                   .hide = true};
+static const ScreenCapturer::Config capture_opts = {.fps = 60,
+                                                    .width = 1920,
+                                                    .height = 1200,
+                                                    .keep_ratio = true,
+                                                    .exlude_window_id = {}};
 
 static char hostbuf[16] = "127.0.0.1";
 static char portbuf[8] = "8888";
@@ -44,19 +49,18 @@ void parseEnvs()
     }
 }
 
-MainWindow::MainWindow(mu_Context *ctx, int argc, char *argv[])
-    : ioctx_(), ctx_(ctx)
+MainWindow::MainWindow(mu_Context *ctx, int argc, char *argv[]) : ctx_(ctx)
 {
     parseEnvs();
     /* absl::ParseCommandLine(argc, argv); */
 
     auto_login_ = argc > 1 && argv[1];
 
-    pc_ = make_unique<PeerClient>();
+    pc_ = make_unique<PeerClient>(pc_conf_);
     cc_ = std::make_unique<SignalClient>(ioctx_);
     local_renderer_ = VideoRenderer::Create(local_opts);
     remote_renderer_ = VideoRenderer::Create(remote_opts);
-    remote_video_src_ = ScreenCapturer::Create({});
+    remote_video_src_ = ScreenCapturer::Create(capture_opts);
 
     executor_ = EventExecutor::create(remote_renderer_->get_window());
     stats_observer_ = StatsObserver::Create(stats_json_);
@@ -66,9 +70,14 @@ MainWindow::MainWindow(mu_Context *ctx, int argc, char *argv[])
     pc_->set_stats_observer(stats_observer_.get());
     pc_->add_screen_video_source(remote_video_src_);
     pc_->add_screen_sinks(remote_renderer_);
-    if (CameraCapturer::GetDeviceNum() > 0) {
+    auto cameras = CameraCapturer::GetDeviceList();
+    if (!cameras.empty()) {
+        logger::info("supported cameras: {}", cameras);
         local_video_src_ =
-            CameraCapturer::Create({.width = 600, .height = 400, .fps = 30});
+            CameraCapturer::Create({.width = 600,
+                                    .height = 400,
+                                    .fps = 30,
+                                    .uniq = cameras[0].second.c_str()});
         pc_->add_camera_video_source(local_video_src_);
         pc_->add_camera_sinks(local_renderer_);
     }
