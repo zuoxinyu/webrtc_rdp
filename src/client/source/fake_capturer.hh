@@ -8,7 +8,7 @@
 #include "api/video/video_frame.h"
 #include "api/video/video_source_interface.h"
 
-struct FakeCapturer : public VideoSource {
+struct FakeCapturer : public VideoTrackSource {
   public:
     struct Config {
         int width;

@@ -7,13 +7,7 @@
 
 #include <memory>
 
-#include "api/create_peerconnection_factory.h"
-#include "api/jsep.h"
 #include "api/peer_connection_interface.h"
-#include "api/scoped_refptr.h"
-#include "api/set_local_description_observer_interface.h"
-#include "api/set_remote_description_observer_interface.h"
-#include "rtc_base/ref_counted_object.h"
 
 struct PeerClient : private webrtc::PeerConnectionObserver,
                     private webrtc::DataChannelObserver,
@@ -23,7 +17,7 @@ struct PeerClient : private webrtc::PeerConnectionObserver,
     struct Config {
         Config() { ; }
         bool use_codec = true;
-        std::string video_codec = "video/VP9";
+        std::string video_codec = "video/H264";
         bool enable_chat = true;
         bool enable_audio = false;
         bool enable_screen = true;
@@ -39,7 +33,7 @@ struct PeerClient : private webrtc::PeerConnectionObserver,
         bool binary;
     };
 
-    using VideoSourcePtr = rtc::scoped_refptr<VideoSource>;
+    using VideoSourcePtr = rtc::scoped_refptr<VideoTrackSource>;
     using VideoSinkPtr = rtc::scoped_refptr<VideoSink>;
     using MessageQueue = std::queue<ChanMessage>;
 
@@ -126,8 +120,7 @@ struct PeerClient : private webrtc::PeerConnectionObserver,
         nullptr;
     // TODO: multiple pc instances support?
     rtc::scoped_refptr<webrtc::PeerConnectionInterface> pc_ = nullptr;
-    rtc::scoped_refptr<webrtc::DataChannelInterface> local_chan_ = nullptr;
-    rtc::scoped_refptr<webrtc::DataChannelInterface> remote_chan_ = nullptr;
+    rtc::scoped_refptr<webrtc::DataChannelInterface> data_chan_ = nullptr;
     std::unique_ptr<MessageQueue> mq_;
 
     // states

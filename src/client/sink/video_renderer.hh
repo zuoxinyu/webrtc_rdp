@@ -10,9 +10,7 @@
 #include <SDL2/SDL.h>
 
 #include "api/video/video_frame.h"
-#include "api/video/video_sink_interface.h"
 #include "modules/desktop_capture/desktop_capture_types.h"
-#include "rtc_base/ref_count.h"
 
 struct VideoRenderer : VideoSink {
   public:

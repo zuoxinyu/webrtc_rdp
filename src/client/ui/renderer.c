@@ -1,3 +1,5 @@
+#ifndef USE_SDL_RENDERER
+
 #include "renderer.h"
 #include "atlas.inl"
 #include <GL/glew.h>
@@ -215,3 +217,5 @@ void r_present(void)
     flush();
     SDL_GL_SwapWindow(window);
 }
+
+#endif

@@ -1,5 +1,4 @@
 #include "camera_capturer.hh"
-#include "logger.hh"
 
 #include "api/video/video_source_interface.h"
 #include "modules/video_capture/video_capture.h"
@@ -53,7 +52,8 @@ rtc::scoped_refptr<CameraCapturer> CameraCapturer::Create(Config conf)
     return rtc::make_ref_counted<CameraCapturer>(conf);
 }
 
-CameraCapturer::CameraCapturer(CameraCapturer::Config conf) : VideoSource(false)
+CameraCapturer::CameraCapturer(CameraCapturer::Config conf)
+    : VideoTrackSource(false)
 {
     source_ = std::make_unique<CameraCapturerImpl>(conf);
 }

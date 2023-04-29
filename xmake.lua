@@ -65,7 +65,7 @@ target('dezk', function()
         add_syslinks('dbus-1', 'glib-2.0', 'gobject-2.0', 'gmodule-2.0', 'gio-2.0', 'gbm')
         add_syslinks('xdo', 'xcb', 'X11', 'Xext', 'Xfixes', 'Xdamage', 'Xrandr', 'Xrender', 'Xau', 'Xdmcp', 'Xcomposite',
             'Xtst')
-        add_syslinks('rt', 'atomic', 'GL', 'GLEW', 'drm')
+        add_syslinks('rt', 'atomic', 'GL', 'GLEW', 'drm', 'SDL2_ttf')
     elseif is_os('windows') then
         add_defines('WEBRTC_WIN', 'NOMINMAX', '_WIN32_WINNT=0x0601')
     end

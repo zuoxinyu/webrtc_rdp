@@ -4,11 +4,10 @@
 
 #include <memory>
 
-#include "api/media_stream_interface.h"
 #include "api/video/video_frame.h"
 #include "api/video/video_source_interface.h"
 
-struct CameraCapturer : public VideoSource {
+struct CameraCapturer : public VideoTrackSource {
   public:
     struct Config {
         int width;

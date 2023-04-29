@@ -62,7 +62,7 @@ int FFMPEGEncoder::InitEncode(const webrtc::VideoCodec *codec_settings,
                   "maxBitrate: {}\n"
                   "maxFramerate: {}\n"
                   "simucastN: {}\n"
-                  //"scalability: {}\n"
+                  "gopsize: {}\n"
                   //"dropEnabled: {}\n"
                   //"encodeComplexity: {}\n"
                   "]",
@@ -72,7 +72,8 @@ int FFMPEGEncoder::InitEncode(const webrtc::VideoCodec *codec_settings,
                   codec_settings->minBitrate,   //
                   codec_settings->maxBitrate,   //
                   codec_settings->maxFramerate, //
-                  codec_settings->numberOfSimulcastStreams
+                  codec_settings->numberOfSimulcastStreams,
+                  codec_settings->H264().keyFrameInterval
 
     );
     if (codec_settings->codecType != VideoCodecType::kVideoCodecH264) {
@@ -102,7 +103,7 @@ int FFMPEGEncoder::InitEncode(const webrtc::VideoCodec *codec_settings,
     avctx_->framerate = AVRational{60, 1};
     // AVRational{static_cast<int>(codec_settings->maxFramerate), 1};
     avctx_->time_base = av_inv_q(avctx_->framerate);
-    avctx_->gop_size = 50; // codec_settings->H264().keyFrameInterval;
+    avctx_->gop_size = codec_settings->H264().keyFrameInterval;
     avctx_->max_b_frames = 0;
     avctx_->bit_rate =
         200 * 1000 * 1000; // codec_settings->startBitrate * 1000;
@@ -110,13 +111,13 @@ int FFMPEGEncoder::InitEncode(const webrtc::VideoCodec *codec_settings,
         1000 * 1000 * 1000; // codec_settings->maxBitrate * 1000;
     avctx_->rc_min_rate =
         50 * 1000 * 1000;        // codec_settings->minBitrate * 1000;
-    avctx_->global_quality = 20; // ?
+    avctx_->global_quality = 10; // 1-100, higher is worse
     avctx_->profile = FF_PROFILE_H264_HIGH;
     avctx_->level = 51; // 5.1
-    // constant quality
 
     int ret;
     if (hwac_) {
+        // constant quality
         av_opt_set(avctx_->priv_data, "rc_mode", "CQP", 0);
         ret = av_hwdevice_ctx_create(&device_ctx_, AV_HWDEVICE_TYPE_VAAPI,
                                      nullptr, nullptr, 0);

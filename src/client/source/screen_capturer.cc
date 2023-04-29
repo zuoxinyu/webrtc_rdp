@@ -21,7 +21,7 @@
 
 #include <libyuv/convert.h>
 #include <libyuv/video_common.h>
-class ScreenCaptureImpl : public rtc::VideoSourceInterface<webrtc::VideoFrame>,
+class ScreenCaptureImpl : public VideoSource,
                           public webrtc::DesktopCapturer::Callback
 {
   public:
@@ -107,29 +107,9 @@ class ScreenCaptureImpl : public rtc::VideoSourceInterface<webrtc::VideoFrame>,
         }
     }
 
-  public: // impl VideoSourceInterface
-    void AddOrUpdateSink(rtc::VideoSinkInterface<webrtc::VideoFrame> *sink,
-                         const rtc::VideoSinkWants &wants) override
-    {
-        auto pair = std::find_if(
-            sinks_.begin(), sinks_.end(),
-            [sink](const SinkPair &pair) { return pair.sink == sink; });
-        if (pair == sinks_.end()) {
-            sinks_.emplace_back(sink, wants);
-        } else {
-            pair->wants = wants;
-        }
-    };
-
-    void RemoveSink(rtc::VideoSinkInterface<webrtc::VideoFrame> *sink) override
-    {
-        std::erase_if(
-            sinks_, [sink](const SinkPair &pair) { return pair.sink == sink; });
-    };
-
     void RequestRefreshFrame() override{};
 
-  public: // impl DesktopCapturer::Callback
+  private: // impl DesktopCapturer::Callback
     void OnCaptureResult(webrtc::DesktopCapturer::Result result,
                          std::unique_ptr<webrtc::DesktopFrame> frame) override
     {
@@ -177,21 +157,9 @@ class ScreenCaptureImpl : public rtc::VideoSourceInterface<webrtc::VideoFrame>,
                       });
     }
 
-  protected:
-    struct SinkPair {
-        SinkPair(rtc::VideoSinkInterface<webrtc::VideoFrame> *sink,
-                 const rtc::VideoSinkWants &wants)
-            : sink(sink), wants(wants)
-        {
-        }
-        rtc::VideoSinkInterface<webrtc::VideoFrame> *sink;
-        rtc::VideoSinkWants wants;
-    };
-
   private:
     std::unique_ptr<webrtc::DesktopCapturer> desktop_capturer_;
     std::thread thread_;
-    std::vector<SinkPair> sinks_;
     std::atomic<bool> running_ = false;
     rtc::scoped_refptr<webrtc::I420Buffer> origin_buffer_;
     rtc::scoped_refptr<webrtc::I420Buffer> scaled_buffer_;
@@ -204,7 +172,7 @@ rtc::scoped_refptr<ScreenCapturer> ScreenCapturer::Create(Config conf)
 }
 
 ScreenCapturer::ScreenCapturer(Config conf)
-    : VideoSource(false), conf_(std::move(conf))
+    : VideoTrackSource(false), conf_(std::move(conf))
 {
     source_ =
         std::make_unique<ScreenCaptureImpl>(conf_, ScreenCaptureImpl::kScreen);

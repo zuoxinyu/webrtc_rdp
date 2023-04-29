@@ -14,21 +14,21 @@ extern "C" {
 #include "ui/renderer.h"
 }
 
-static const VideoRenderer::Config local_opts = {.name = "camera video",
-                                                 .width = 600,
-                                                 .height = 400,
-                                                 .use_opengl = false,
-                                                 .dump = false,
-                                                 .hide = true};
-static const VideoRenderer::Config remote_opts = {.name = "remote desktop",
-                                                  .width = 1920,
-                                                  .height = 1200,
+static const VideoRenderer::Config camera_opts = {.name = "camera video",
+                                                  .width = 600,
+                                                  .height = 400,
                                                   .use_opengl = false,
                                                   .dump = false,
                                                   .hide = true};
+static const VideoRenderer::Config desktop_opts = {.name = "remote desktop",
+                                                   .width = 1920,
+                                                   .height = 1200,
+                                                   .use_opengl = false,
+                                                   .dump = false,
+                                                   .hide = true};
 static const ScreenCapturer::Config capture_opts = {.fps = 60,
-                                                    .width = 1920,
-                                                    .height = 1200,
+                                                    .width = 2560,
+                                                    .height = 1600,
                                                     .keep_ratio = true,
                                                     .exlude_window_id = {}};
 
@@ -56,10 +56,12 @@ MainWindow::MainWindow(mu_Context *ctx, int argc, char *argv[]) : ctx_(ctx)
 
     auto_login_ = argc > 1 && argv[1];
 
+    chatbuf_.reserve(6400);
+
     pc_ = make_unique<PeerClient>(pc_conf_);
     cc_ = std::make_unique<SignalClient>(ioctx_);
-    local_renderer_ = VideoRenderer::Create(local_opts);
-    remote_renderer_ = VideoRenderer::Create(remote_opts);
+    local_renderer_ = VideoRenderer::Create(camera_opts);
+    remote_renderer_ = VideoRenderer::Create(desktop_opts);
     remote_video_src_ = ScreenCapturer::Create(capture_opts);
 
     executor_ = EventExecutor::create(remote_renderer_->get_window());
@@ -124,14 +126,11 @@ void MainWindow::open_stats()
 
 void MainWindow::update_chat(const std::string &who, const char *buf)
 {
-    if (chatbuf_[0]) {
-        std::strcat(chatbuf_, "\n");
-    }
-    auto prefix = who + ": ";
-    std::strcat(chatbuf_, prefix.c_str());
-    std::strcat(chatbuf_, buf);
+    fmt::format_to(std::back_inserter(chatbuf_), "{}: {}\n", who, buf);
+    chatbuf_.data()[chatbuf_.size()] = 0;
     chatbuf_updated_ = true;
 }
+
 void MainWindow::open_chat()
 {
     if (cc_->calling())
@@ -203,7 +202,7 @@ void MainWindow::run()
 
         process_mu_commands();
 
-        ::usleep(12000);
+        //::usleep(12000);
     }
 
     SDL_RemoveTimer(timer);
@@ -246,7 +245,7 @@ void MainWindow::chat_window(mu_Context *ctx)
         mu_begin_panel(ctx, "Log Output");
         mu_Container *panel = mu_get_current_container(ctx);
         mu_layout_row(ctx, 1, (int[]){-1}, -1);
-        mu_text(ctx, chatbuf_);
+        mu_text(ctx, chatbuf_.data());
         mu_end_panel(ctx);
         if (chatbuf_updated_) {
             panel->scroll.y = panel->content_size.y;

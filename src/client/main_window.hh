@@ -63,7 +63,7 @@ class MainWindow
 
     // states
     bool running_ = false;
-    char chatbuf_[64000] = {0};
+    std::vector<char> chatbuf_;
     bool chatbuf_updated_ = false;
     bool show_stats_ = false;
     std::string stats_json_;

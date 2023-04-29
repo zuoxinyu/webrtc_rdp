@@ -1,26 +1,16 @@
 #include "peer_client.hh"
-#include "api/rtp_parameters.h"
-#include "api/video_codecs/video_encoder_factory.h"
-#include "client/codec/decoder/factory.hh"
-#include "client/codec/encoder/factory.hh"
-#include "logger.hh"
 
-#include <memory>
-#include <spdlog/spdlog.h>
 #include <utility>
 
 #include "api/audio_codecs/builtin_audio_decoder_factory.h"
 #include "api/audio_codecs/builtin_audio_encoder_factory.h"
-#include "api/audio_options.h"
 #include "api/create_peerconnection_factory.h"
-#include "api/jsep.h"
 #include "api/media_stream_interface.h"
 #include "api/peer_connection_interface.h"
 #include "api/video/video_sink_interface.h"
 #include "api/video_codecs/builtin_video_decoder_factory.h"
 #include "api/video_codecs/builtin_video_encoder_factory.h"
-#include "api/video_codecs/video_encoder_factory_template.h"
-#include "rtc_base/thread.h"
+#include "api/video_codecs/video_encoder_factory.h"
 
 static const std::string kDefaultSTUNServer = "stun:stun1.l.google.com:19302";
 static const std::string kAudioLabel = "x-remote-track-audio";
@@ -33,6 +23,33 @@ static const int kMinBitrate = 10 * 1000 * 1000;    // 10Mbps
 static const int kMaxFPS = 60;
 
 using SignalingState = webrtc::PeerConnectionInterface::SignalingState;
+
+static void
+set_encoding_params(rtc::scoped_refptr<webrtc::RtpSenderInterface> &&sender)
+{
+    webrtc::RtpEncodingParameters encode_param;
+    encode_param.max_bitrate_bps = kMaxBitrate;
+    encode_param.min_bitrate_bps = kMinBitrate;
+    encode_param.max_framerate = kMaxFPS;
+    encode_param.network_priority = webrtc::Priority::kHigh;
+    encode_param.bitrate_priority = 4.0; // high
+
+    webrtc::RtpParameters params = sender->GetParameters();
+
+    if (params.encodings.empty()) {
+        params.encodings.emplace_back(encode_param);
+    } else {
+        for (auto &ep : params.encodings) {
+            ep.max_bitrate_bps = kMaxBitrate;
+            ep.min_bitrate_bps = kMinBitrate;
+            ep.max_framerate = kMaxFPS;
+            ep.network_priority = webrtc::Priority::kHigh;
+            ep.bitrate_priority = 4.0;
+        }
+    }
+
+    sender->SetParameters(params);
+}
 
 struct SetLocalSDPCallback
     : public webrtc::SetLocalDescriptionObserverInterface {
@@ -93,19 +110,14 @@ PeerClient::PeerClient(Config conf) : conf_(std::move(conf))
     signaling_thread_ = rtc::Thread::CreateWithSocketServer();
     signaling_thread_->Start();
 
-    std::unique_ptr<webrtc::VideoEncoderFactory> encoder_factory =
-        std::make_unique<CustomVideoEncoderFactory>();
-    std::unique_ptr<webrtc::VideoDecoderFactory> decoder_factory =
-        std::make_unique<CustomVideoDecoderFactory>();
-
     pc_factory_ = webrtc::CreatePeerConnectionFactory(
         nullptr, nullptr, signaling_thread_.get(), nullptr,
         webrtc::CreateBuiltinAudioEncoderFactory(),
         webrtc::CreateBuiltinAudioDecoderFactory(),
         webrtc::CreateBuiltinVideoEncoderFactory(),
         webrtc::CreateBuiltinVideoDecoderFactory(),
-        /* std::move(encoder_factory), // */
-        /* std::move(decoder_factory), // */
+        /* std::make_unique<CustomVideoEncoderFactory>(), // */
+        /* std::make_unique<CustomVideoDecoderFactory>(), // */
         nullptr, nullptr);
 
     webrtc::PeerConnectionFactoryInterface::Options factory_opts;
@@ -123,12 +135,10 @@ PeerClient::PeerClient(Config conf) : conf_(std::move(conf))
             codec_names.emplace_back(codec.mime_type(), codec.name);
         }
         logger::debug("supported codecs: {}", codec_names);
-
-        auto cap = std::find_if(codecs.cbegin(), codecs.cend(),
-                                [this](const auto &it) {
-                                    return it.mime_type() == conf_.video_codec;
-                                });
-
+        auto findfn = [this](const auto &it) {
+            return it.mime_type() == conf_.video_codec;
+        };
+        auto cap = std::find_if(codecs.cbegin(), codecs.cend(), findfn);
         if (cap != codecs.cend()) {
             logger::debug("prefered codecs: {}", conf_.video_codec);
             prefered_codecs_.emplace_back(*cap);
@@ -155,7 +165,7 @@ bool PeerClient::create_peer_connection()
     server.uri = kDefaultSTUNServer;
     config.servers.push_back(server);
     config.sdp_semantics = webrtc::SdpSemantics::kUnifiedPlan;
-    config.network_preference = rtc::AdapterType::ADAPTER_TYPE_WIFI;
+    config.network_preference = rtc::AdapterType::ADAPTER_TYPE_LOOPBACK;
     config.screencast_min_bitrate = kMinBitrate;
     config.audio_jitter_buffer_min_delay_ms = 0;
 
@@ -175,18 +185,17 @@ bool PeerClient::create_peer_connection()
 
 void PeerClient::delete_peer_connection()
 {
-    // local_chan_->Close();
     pc_->Close();
     pc_ = nullptr;
     mq_ = std::make_unique<MessageQueue>();
     is_caller_ = false;
 
-    if (camera_src_ && camera_src_->state() == VideoSource::SourceState::kLive)
+    if (camera_src_ && camera_src_->state() == VideoTrackSource::kLive)
         camera_src_->Stop();
+    if (screen_src_ && screen_src_->state() == VideoTrackSource::kLive)
+        screen_src_->Stop();
     if (camera_sink_)
         camera_sink_->Stop();
-    if (screen_src_ && screen_src_->state() == VideoSource::kLive)
-        screen_src_->Stop();
     if (screen_sink_)
         screen_sink_->Stop();
 }
@@ -211,8 +220,9 @@ void PeerClient::create_transceivers()
         if (!trans.ok()) {
             logger::error("failed to add transceiver: {}",
                           trans.error().message());
+        } else {
+            trans.value()->receiver()->SetJitterBufferMinimumDelay(0.0);
         }
-        trans.value()->receiver()->SetJitterBufferMinimumDelay(0.0);
 
         if (screen_sink_) {
             screen_sink_->Start();
@@ -220,17 +230,10 @@ void PeerClient::create_transceivers()
     }
 }
 
-// ~TODO: use AddTransceiver instead~
+// ~~TODO: use AddTransceiver instead~~
 // see: https://groups.google.com/g/discuss-webrtc/c/wDFPFIBRRPs/m/xoPXKKC1BQAJ
 void PeerClient::create_media_tracks()
 {
-    webrtc::RtpEncodingParameters encode_param;
-    encode_param.max_bitrate_bps = kMaxBitrate;
-    encode_param.min_bitrate_bps = kMinBitrate;
-    encode_param.max_framerate = kMaxFPS;
-    encode_param.network_priority = webrtc::Priority::kHigh;
-    encode_param.bitrate_priority = 4.0; // high
-
     if (conf_.enable_audio) {
         auto audio_src =
             pc_factory_->CreateAudioSource(cricket::AudioOptions());
@@ -249,6 +252,8 @@ void PeerClient::create_media_tracks()
         auto result = pc_->AddTrack(track, {kCameraVideoLabel});
         if (!result.ok()) {
             logger::error("failed to add camera video track");
+        } else {
+            set_encoding_params(result.MoveValue());
         }
     }
 
@@ -260,18 +265,20 @@ void PeerClient::create_media_tracks()
         auto result = pc_->AddTrack(track, {kScreenVideoLabel});
         if (!result.ok()) {
             logger::error("failed to add screen video track");
-            return;
+        } else {
+            set_encoding_params(result.MoveValue());
         }
     }
 
     if (conf_.use_codec && !prefered_codecs_.empty()) {
         auto ts = pc_->GetTransceivers();
         for (const auto &t : ts) {
-            if (t->media_type() == cricket::MediaType::MEDIA_TYPE_VIDEO) {
-                auto result = t->SetCodecPreferences(prefered_codecs_);
-                if (!result.ok()) {
-                    logger::error("failed to set preferred codecs");
-                }
+            if (t->media_type() != cricket::MediaType::MEDIA_TYPE_VIDEO) {
+                continue;
+            }
+            auto result = t->SetCodecPreferences(prefered_codecs_);
+            if (!result.ok()) {
+                logger::error("failed to set preferred codecs");
             }
         }
     }
@@ -283,7 +290,8 @@ void PeerClient::create_data_channel()
     webrtc::DataChannelInit config{.protocol = "x-remote-input"};
     auto data_chan = pc_->CreateDataChannelOrError(kDataChanId, &config);
     if (data_chan.ok()) {
-        local_chan_ = data_chan.value();
+        data_chan_ = data_chan.value();
+        data_chan_->RegisterObserver(this);
     } else {
         logger::error("failed to add data channel");
     }
@@ -344,6 +352,7 @@ void PeerClient::onReady()
     // we don't send stream as caller
     create_peer_connection();
     create_transceivers();
+    // only caller need to create data chan
     create_data_channel();
 
     assert(pc_->signaling_state() ==
@@ -359,7 +368,6 @@ void PeerClient::onRemoteOffer(const std::string &sdp)
 
     create_peer_connection();
     create_media_tracks();
-    create_data_channel();
 
     assert(pc_->signaling_state() ==
            webrtc::PeerConnectionInterface::SignalingState::kStable);
@@ -384,7 +392,7 @@ void PeerClient::onRemoteAnswer(const std::string &sdp)
 
 void PeerClient::onRemoteCandidate(const std::string &sdp)
 {
-    logger::debug("got remote candidate:\n{}", sdp);
+    // logger::debug("got remote candidate:\n{}", sdp);
     webrtc::SdpParseError err;
     std::unique_ptr<webrtc::IceCandidateInterface> candi;
     candi.reset(webrtc::CreateIceCandidate("", 0, sdp, &err));
@@ -421,16 +429,14 @@ void PeerClient::OnTrack(
     rtc::scoped_refptr<webrtc::RtpTransceiverInterface> transceiver)
 {
     auto track = transceiver->receiver()->track().release();
-    logger::debug("OnTrack: stream_id[0]: {} receiver->id: {} track->id: {}",
-                  transceiver->receiver()->stream_ids()[0],
-                  transceiver->receiver()->id(), track->id());
+    logger::debug("OnTrack: stream_id[0]: {} track->id: {}",
+                  transceiver->receiver()->stream_ids()[0], track->id());
     if (track->kind() == webrtc::MediaStreamTrackInterface::kVideoKind) {
         auto video_track = static_cast<webrtc::VideoTrackInterface *>(track);
         // `track->id` is not guaranteed to be the same as `label` in remote
         // pc_factory_->CreateVideoTrack(`label`), use stream id instead
         if (transceiver->receiver()->stream_ids()[0] == kScreenVideoLabel &&
             screen_sink_) {
-            rtc::VideoSinkWants wants;
             video_track->AddOrUpdateSink(screen_sink_.get(),
                                          rtc::VideoSinkWants());
         }
@@ -442,9 +448,8 @@ void PeerClient::OnTrack(
     } else if (track->kind() == webrtc::MediaStreamTrackInterface::kAudioKind) {
         auto audio_track = static_cast<webrtc::AudioTrackInterface *>(track);
         if (transceiver->receiver()->stream_ids()[0] == kAudioLabel) {
+            // do nothing for now
         }
-    } else {
-        logger::critical("unreachable");
     }
 }
 
@@ -468,8 +473,8 @@ void PeerClient::OnDataChannel(
 {
     logger::debug("new remote channel [id={} proto={}] connected",
                   data_channel->id(), data_channel->protocol());
-    remote_chan_ = data_channel;
-    remote_chan_->RegisterObserver(this);
+    data_chan_ = data_channel;
+    data_chan_->RegisterObserver(this);
 }
 
 void PeerClient::OnIceCandidate(const webrtc::IceCandidateInterface *candidate)
@@ -481,7 +486,7 @@ void PeerClient::OnIceCandidate(const webrtc::IceCandidateInterface *candidate)
     std::string candi;
     candidate->ToString(&candi);
 
-    logger::debug("got local candidate:\n{}", candi);
+    // logger::debug("got local candidate:\n{}", candi);
 
     signaling_observer_->SendSignal(MessageType::kCandidate, candi);
 }
@@ -494,11 +499,12 @@ void PeerClient::OnIceGatheringChange(
 void PeerClient::OnIceSelectedCandidatePairChanged(
     const cricket::CandidatePairChangeEvent &event)
 {
-    logger::debug(
-        "ICE selected candidate changed, reason:{}\nlocal: {}\nremote: {}",
-        event.reason,
-        event.selected_candidate_pair.local_candidate().ToString(),
-        event.selected_candidate_pair.remote_candidate().ToString());
+    logger::debug("ICE selected candidate changed, reason: {}\n"
+                  "  local : {}\n"
+                  "  remote: {}\n",
+                  event.reason,
+                  event.selected_candidate_pair.local_candidate().ToString(),
+                  event.selected_candidate_pair.remote_candidate().ToString());
 }
 
 // DataChannelInterface impl
@@ -507,26 +513,26 @@ void PeerClient::OnMessage(const webrtc::DataBuffer &msg)
     if (!msg.binary) {
         std::string m(reinterpret_cast<const char *>(msg.data.data()),
                       msg.size());
-        logger::debug("recv remote text message: {}", m);
+        // logger::debug("recv remote text message: {}", m);
     }
     mq_->push(PeerClient::ChanMessage{msg.data.data(), msg.size(), msg.binary});
 }
 
 bool PeerClient::post_text_message(const std::string &text)
 {
-    if (!local_chan_)
+    if (!data_chan_)
         return false;
     webrtc::DataBuffer blob(text);
-    return local_chan_->Send(blob);
+    return data_chan_->Send(blob);
 }
 
 bool PeerClient::post_binary_message(const uint8_t *data, size_t size)
 {
-    if (!local_chan_)
+    if (!data_chan_)
         return false;
     rtc::CopyOnWriteBuffer buf(data, size);
     webrtc::DataBuffer blob{buf, true};
-    return local_chan_->Send(blob);
+    return data_chan_->Send(blob);
 }
 
 std::optional<PeerClient::ChanMessage> PeerClient::poll_remote_message()

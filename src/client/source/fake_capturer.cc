@@ -1,5 +1,4 @@
 #include "fake_capturer.hh"
-#include "logger.hh"
 
 #include "api/video/video_source_interface.h"
 #include "modules/video_capture/video_capture.h"
@@ -13,7 +12,7 @@ extern "C" {
 #include <third_party/ffmpeg/libavutil/frame.h>
 }
 
-class FakeCapturerImpl : public rtc::VideoSourceInterface<webrtc::VideoFrame>
+class FakeCapturerImpl : public VideoSource
 {
   public:
     FakeCapturerImpl(const FakeCapturer::Config &conf)
@@ -41,12 +40,6 @@ class FakeCapturerImpl : public rtc::VideoSourceInterface<webrtc::VideoFrame>
     }
 
   public: // impl VideoSourceInterface
-    void AddOrUpdateSink(rtc::VideoSinkInterface<webrtc::VideoFrame> *sink,
-                         const rtc::VideoSinkWants &wants) override{};
-
-    void
-    RemoveSink(rtc::VideoSinkInterface<webrtc::VideoFrame> *sink) override{};
-
     void RequestRefreshFrame() override{};
 
     bool running() const { return running_; }
@@ -99,7 +92,7 @@ size_t FakeCapturer::GetDeviceNum()
     return device_info->NumberOfDevices();
 }
 
-FakeCapturer::FakeCapturer(FakeCapturer::Config conf) : VideoSource(false)
+FakeCapturer::FakeCapturer(FakeCapturer::Config conf) : VideoTrackSource(false)
 {
     source_ = std::make_unique<FakeCapturerImpl>(conf);
 }

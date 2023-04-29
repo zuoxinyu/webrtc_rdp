@@ -4,12 +4,11 @@
 
 #include <memory>
 
-#include "api/media_stream_interface.h"
 #include "api/video/video_frame.h"
 #include "api/video/video_source_interface.h"
 #include "modules/desktop_capture/desktop_capture_types.h"
 
-struct ScreenCapturer : public VideoSource {
+struct ScreenCapturer : public VideoTrackSource {
   public:
     struct Config {
         int fps = 60;

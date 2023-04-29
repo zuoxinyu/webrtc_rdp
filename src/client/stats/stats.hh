@@ -2,15 +2,14 @@
 
 #include "logger.hh"
 
-#include <boost/json/parse.hpp>
-#include <boost/json/serialize.hpp>
+#include <nlohmann/json.hpp>
 
 #include "api/peer_connection_interface.h"
 
-namespace json = boost::json;
-
 class StatsObserver : public webrtc::RTCStatsCollectorCallback
 {
+    using json = nlohmann::ordered_json;
+
   public:
     static rtc::scoped_refptr<StatsObserver> Create(std::string &json)
     {
@@ -31,28 +30,17 @@ class StatsObserver : public webrtc::RTCStatsCollectorCallback
     static std::string dump_section(const std::string &json,
                                     const std::string &section)
     {
-        std::string content;
-        auto arr = json::parse(json).as_array();
-        auto it =
-            std::find_if(arr.cbegin(), arr.cend(),
-                         [&section](const boost::json::value &v) -> bool {
-                             auto o = v.as_object();
-                             return o.at("type").get_string() == section &&
-                                    o.contains("kind") &&
-                                    o.at("kind").get_string() == "video";
-                         });
-        if (!it->is_object()) {
-            return content;
+        auto arr = json::parse(json);
+        auto findfn = [&section](const decltype(arr) &o) -> bool {
+            return o["type"] == section && o["kind"] == "video";
+        };
+        auto it = std::find_if(std::begin(arr), std::end(arr), findfn);
+        if (it == arr.end()) {
+            return {};
         }
-        auto obj = it->as_object();
-        std::for_each(obj.cbegin(), obj.cend(),
-                      [&content](boost::json::key_value_pair v) {
-                          content += std::string(v.key()) + ": " +
-                                     json::serialize(v.value()) + "\n";
-                      });
 
-        // logger::debug("stats section [type={}]:\n{}", section, content);
-        return content;
+        /* logger::debug("stats\n{}", it->dump(4)); */
+        return it->dump(4);
     }
 
   private:

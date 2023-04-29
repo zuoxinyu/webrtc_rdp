@@ -89,10 +89,12 @@ VideoRenderer::VideoRenderer(Config conf, SDL_Window *win)
     : window_(win), conf_(std::move(conf))
 {
     running_ = !conf.hide;
-    window_ =
-        SDL_CreateWindow(conf_.name.c_str(), 0, 100, conf_.width, conf_.height,
-                         SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI);
+    uint32_t flags = SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI;
+    if (conf_.hide)
+        flags |= SDL_WINDOW_HIDDEN;
 
+    window_ = SDL_CreateWindow(conf_.name.c_str(), 0, 100, conf_.width,
+                               conf_.height, flags);
     if (glewInit() != GLEW_OK) {
         throw std::runtime_error("glew init failed");
     }
@@ -263,7 +265,8 @@ void VideoRenderer::update_sdl_textures(const void *ydata, const void *udata,
                          static_cast<const uint8_t *>(ydata), conf_.width,
                          static_cast<const uint8_t *>(udata), conf_.width / 2,
                          static_cast<const uint8_t *>(vdata), conf_.width / 2);
-    SDL_RenderCopy(renderer_, texture_, nullptr, nullptr);
+    SDL_Rect rect{0, 0, conf_.width, conf_.height};
+    SDL_RenderCopy(renderer_, texture_, nullptr, &rect);
     SDL_RenderPresent(renderer_);
     SDL_RenderFlush(renderer_);
 }

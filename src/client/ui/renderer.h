@@ -23,4 +23,9 @@ extern float bg[3];
 
 SDL_Window *r_get_window();
 
+#ifdef USE_SDL_RENDERER
+void push_render_target();
+void pop_render_target();
+#endif
+
 #endif

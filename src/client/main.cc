@@ -1,4 +1,3 @@
-#include "logger.hh"
 #include "main_window.hh"
 
 #include <array>
@@ -9,12 +8,12 @@
 #include <string>
 
 #include "rtc_base/logging.h"
-#include <spdlog/spdlog.h>
 
 extern "C" {
 #include "ui/microui.h"
 #include "ui/renderer.h"
 #include <SDL2/SDL.h>
+#include <SDL2/SDL_ttf.h>
 }
 
 static int text_width(mu_Font font, const char *text, int len)
@@ -30,6 +29,7 @@ static int text_height(mu_Font font) { return r_get_text_height(); }
 static mu_Context *init()
 {
     SDL_Init(SDL_INIT_EVERYTHING);
+    TTF_Init();
     r_init();
     auto *ctx = new mu_Context;
     mu_init(ctx);
@@ -50,7 +50,7 @@ static const char *kDefaultPort = "DEFAULT_SIGNAL_PORT";
 int main(int argc, char *argv[])
 {
     rtc::LogMessage::LogToDebug(rtc::LS_ERROR);
-    spdlog::set_level(spdlog::level::debug);
+    logger::set_level(spdlog::level::debug);
     logger::info("Hello dezk");
 
     mu_Context *ctx = init();

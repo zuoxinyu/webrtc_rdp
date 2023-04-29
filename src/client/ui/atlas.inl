@@ -1,4 +1,4 @@
-
+#include "microui.h"
 enum { ATLAS_WHITE = MU_ICON_MAX, ATLAS_FONT };
 enum { ATLAS_WIDTH = 128, ATLAS_HEIGHT = 128 };
 
