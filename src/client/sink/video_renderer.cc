@@ -14,13 +14,13 @@
 static const std::string vs_src = R"(
     #version 330 core
 
-    attribute vec2 aPos;
-    attribute vec2 aTexCoord;
+    layout (location = 0) in vec2 aPosition;
+    layout (location = 1) in vec2 aTexCoord;
 
     varying vec2 vTexCoord;
 
     void main() {
-      gl_Position = vec4(aPos, 0.0, 1.0);
+      gl_Position = vec4(aPosition, 0.0, 1.0);
       vTexCoord = aTexCoord;
     }
 )";
@@ -45,17 +45,17 @@ static const std::string fs_src = R"(
       gl_FragColor = vec4(rgb, 1);
     }
 )";
-static const float pos_buffer[] = {
-    -1.0, -1.0, // lt
-    +1.0, -1.0, // rt
-    -1.0, +1.0, // lb
-    +1.0, +1.0, // rb
+static const float vertices[] = {
+    // position|texcoord
+    -1.0, -1.0, 0.0, 1.0, // lt
+    +1.0, -1.0, 1.0, 1.0, // rt
+    -1.0, +1.0, 0.0, 0.0, // lb
+    +1.0, +1.0, 1.0, 0.0, // rb
 };
-static const float tex_buffer[] = {
-    0.0, 1.0, // lt
-    1.0, 1.0, // rt
-    0.0, 0.0, // lb
-    1.0, 0.0, // rb
+
+static const int indices[] = {
+    0, 1, 2, //
+    1, 2, 3, //
 };
 
 rtc::scoped_refptr<VideoRenderer> VideoRenderer::Create(Config conf)
@@ -89,43 +89,51 @@ VideoRenderer::VideoRenderer(Config conf, SDL_Window *win)
     : window_(win), conf_(std::move(conf))
 {
     running_ = !conf.hide;
-    uint32_t flags = SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI;
+    uint32_t flags = SDL_WINDOW_OPENGL;
     if (conf_.hide)
         flags |= SDL_WINDOW_HIDDEN;
 
     window_ = SDL_CreateWindow(conf_.name.c_str(), 0, 100, conf_.width,
                                conf_.height, flags);
+    glctx_ = SDL_GL_CreateContext(window_);
     if (glewInit() != GLEW_OK) {
         throw std::runtime_error("glew init failed");
     }
-    glctx_ = SDL_GL_CreateContext(window_);
     assert(glctx_);
 
     glViewport(0, 0, conf_.width, conf_.height);
-    glClearColor(0, 0.2, 0.2, 1);
-    glClearDepth(1.0);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glEnable(GL_DEPTH_TEST);
-    glEnable(GL_TEXTURE_2D);
-    glDepthFunc(GL_LEQUAL);
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 
     program_ = create_program(vs_src, fs_src);
     glUseProgram(program_);
 
-    int tex = glGetAttribLocation(program_, "aTexCoord");
-    int pos = glGetAttribLocation(program_, "aPos");
+    glGenVertexArrays(1, &vao);
+    glGenBuffers(1, &vbo);
+    glGenBuffers(1, &ebo);
 
-    pos_buffer_ =
-        create_buffer(pos, &pos_buffer[0], sizeof(pos_buffer) / sizeof(float));
-    tex_buffer_ =
-        create_buffer(tex, &tex_buffer[0], sizeof(tex_buffer) / sizeof(float));
+    glBindVertexArray(vao);
+
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices,
+                 GL_STATIC_DRAW);
+
+    glVertexAttribPointer(0, 2, GL_FLOAT, false, 4 * sizeof(float), nullptr);
+    glEnableVertexAttribArray(0);
+
+    glVertexAttribPointer(1, 2, GL_FLOAT, false, 4 * sizeof(float), (void *)8);
+    glEnableVertexAttribArray(1);
+
+    glBindVertexArray(0);
 
     textures_[Y] = create_texture();
     textures_[U] = create_texture();
     textures_[V] = create_texture();
 
-    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    glBindVertexArray(vao);
+    glUseProgram(program_);
+    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
+    glBindVertexArray(0);
     SDL_GL_SwapWindow(window_);
 }
 
@@ -168,21 +176,6 @@ webrtc::WindowId VideoRenderer::get_native_window_handle() const
     SDL_VERSION(&info.version)
     SDL_GetWindowWMInfo(window_, &info);
     return info.info.x11.window;
-}
-
-void VideoRenderer::update_frame()
-{
-    rtc::scoped_refptr<webrtc::VideoFrameBuffer> frame = nullptr;
-    frame_queue_.nonblocking_pull(frame);
-    if (frame) {
-        auto yuv = frame->GetI420();
-        if (yuv) {
-            if (conf_.use_opengl)
-                update_gl_textures(yuv->DataY(), yuv->DataU(), yuv->DataV());
-            else
-                update_sdl_textures(yuv->DataY(), yuv->DataU(), yuv->DataV());
-        }
-    }
 }
 
 GLuint VideoRenderer::create_texture()
@@ -245,16 +238,34 @@ GLuint VideoRenderer::create_program(const std::string &vs,
     return program;
 }
 
-GLuint VideoRenderer::create_buffer(int location, const float data[], size_t sz)
+void VideoRenderer::update_gl_textures(const void *ydata, const void *udata,
+                                       const void *vdata)
 {
-    GLuint buf;
-    glGenBuffers(1, &buf);
-    glBindBuffer(GL_ARRAY_BUFFER, buf);
-    glBufferData(GL_ARRAY_BUFFER, sz, data, GL_DYNAMIC_DRAW);
-    glVertexAttribPointer(location, 2, GL_FLOAT, false, 8, data);
-    glEnableVertexAttribArray(location);
+    SDL_GL_MakeCurrent(window_, glctx_);
 
-    return buf;
+    glActiveTexture(GL_TEXTURE0 + Y);
+    glBindTexture(GL_TEXTURE_2D, textures_[Y]);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE, conf_.width, conf_.height, 0,
+                 GL_LUMINANCE, GL_UNSIGNED_BYTE, ydata);
+    glUniform1i(glGetUniformLocation(program_, "uTexY"), Y);
+
+    glActiveTexture(GL_TEXTURE0 + U);
+    glBindTexture(GL_TEXTURE_2D, textures_[U]);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE, conf_.width / 2,
+                 conf_.height / 2, 0, GL_LUMINANCE, GL_UNSIGNED_BYTE, udata);
+    glUniform1i(glGetUniformLocation(program_, "uTexU"), U);
+
+    glActiveTexture(GL_TEXTURE0 + V);
+    glBindTexture(GL_TEXTURE_2D, textures_[V]);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE, conf_.width / 2,
+                 conf_.height / 2, 0, GL_LUMINANCE, GL_UNSIGNED_BYTE, vdata);
+    glUniform1i(glGetUniformLocation(program_, "uTexV"), V);
+
+    glBindVertexArray(vao);
+    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
+    glBindVertexArray(0);
+
+    SDL_GL_SwapWindow(window_);
 }
 
 void VideoRenderer::update_sdl_textures(const void *ydata, const void *udata,
@@ -269,6 +280,44 @@ void VideoRenderer::update_sdl_textures(const void *ydata, const void *udata,
     SDL_RenderCopy(renderer_, texture_, nullptr, &rect);
     SDL_RenderPresent(renderer_);
     SDL_RenderFlush(renderer_);
+}
+
+// running on capture thread (local) or worker thread (remote)?
+void VideoRenderer::OnFrame(const webrtc::VideoFrame &frame)
+{
+    static int once = 0;
+    if (conf_.dump && once < 1200 && once % 60 == 0) {
+        dump_frame(frame, once);
+    }
+    once++;
+
+    frame_queue_.try_push(frame.video_frame_buffer());
+}
+
+void VideoRenderer::update_frame()
+{
+    if (!running_)
+        return;
+
+    if (conf_.hide) {
+        SDL_ShowWindow(window_);
+        conf_.hide = false;
+    }
+
+    rtc::scoped_refptr<webrtc::VideoFrameBuffer> frame = nullptr;
+    frame_queue_.try_pull(frame);
+    if (!frame) {
+        return;
+    }
+
+    auto scaled = frame->Scale(conf_.width, conf_.height);
+    auto yuv = scaled->GetI420();
+    if (yuv) {
+        if (conf_.use_opengl)
+            update_gl_textures(yuv->DataY(), yuv->DataU(), yuv->DataV());
+        else
+            update_sdl_textures(yuv->DataY(), yuv->DataU(), yuv->DataV());
+    }
 }
 
 void VideoRenderer::dump_frame(const webrtc::VideoFrame &frame, int id)
@@ -296,60 +345,4 @@ void VideoRenderer::dump_frame(const webrtc::VideoFrame &frame, int id)
                   frame.id(), frame.size(), frame.width(), frame.height(),
                   frame.timestamp(), frame.ntp_time_ms(),
                   frame.render_time_ms());
-}
-
-void VideoRenderer::update_gl_textures(const void *ydata, const void *udata,
-                                       const void *vdata)
-{
-    SDL_GL_MakeCurrent(window_, glctx_);
-
-    glActiveTexture(GL_TEXTURE0 + Y);
-    glUniform1i(glGetUniformLocation(program_, "uTexY"), Y);
-    glBindTexture(GL_TEXTURE_2D, textures_[Y]);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE, conf_.width, conf_.height, 0,
-                 GL_LUMINANCE, GL_UNSIGNED_BYTE, ydata);
-
-    glActiveTexture(GL_TEXTURE0 + U);
-    glUniform1i(glGetUniformLocation(program_, "uTexU"), U);
-    glBindTexture(GL_TEXTURE_2D, textures_[U]);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE, conf_.width / 2,
-                 conf_.height / 2, 0, GL_LUMINANCE, GL_UNSIGNED_BYTE, udata);
-
-    glActiveTexture(GL_TEXTURE0 + V);
-    glBindTexture(GL_TEXTURE_2D, textures_[V]);
-    glUniform1i(glGetUniformLocation(program_, "uTexV"), V);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE, conf_.width / 2,
-                 conf_.height / 2, 0, GL_LUMINANCE, GL_UNSIGNED_BYTE, vdata);
-
-    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-
-    glFlush();
-    SDL_GL_SwapWindow(window_);
-}
-
-// running on capture thread (local) or (remote)?
-void VideoRenderer::OnFrame(const webrtc::VideoFrame &frame)
-{
-    if (!running_)
-        return;
-    auto buf = frame.video_frame_buffer();
-    // TODO: keep ratio
-    auto scaled = buf->Scale(conf_.width, conf_.height);
-    auto yuv = scaled->GetI420();
-    static int once = 0;
-    if (conf_.dump && once < 1200 && once % 60 == 0) {
-        dump_frame(frame, once);
-    }
-    once++;
-
-    if (conf_.hide) {
-        SDL_ShowWindow(window_);
-        conf_.hide = false;
-    }
-
-    if (conf_.use_opengl) {
-        update_gl_textures(yuv->DataY(), yuv->DataU(), yuv->DataV());
-    } else {
-        update_sdl_textures(yuv->DataY(), yuv->DataU(), yuv->DataV());
-    }
 }

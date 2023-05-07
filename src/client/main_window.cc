@@ -23,7 +23,7 @@ static const VideoRenderer::Config camera_opts = {.name = "camera video",
 static const VideoRenderer::Config desktop_opts = {.name = "remote desktop",
                                                    .width = 1920,
                                                    .height = 1200,
-                                                   .use_opengl = false,
+                                                   .use_opengl = true,
                                                    .dump = false,
                                                    .hide = true};
 static const ScreenCapturer::Config capture_opts = {.fps = 60,
@@ -60,28 +60,28 @@ MainWindow::MainWindow(mu_Context *ctx, int argc, char *argv[]) : ctx_(ctx)
 
     pc_ = make_unique<PeerClient>(pc_conf_);
     cc_ = std::make_unique<SignalClient>(ioctx_);
-    local_renderer_ = VideoRenderer::Create(camera_opts);
-    remote_renderer_ = VideoRenderer::Create(desktop_opts);
-    remote_video_src_ = ScreenCapturer::Create(capture_opts);
+    screen_renderer_ = VideoRenderer::Create(desktop_opts);
+    screen_video_src_ = ScreenCapturer::Create(capture_opts);
 
-    executor_ = EventExecutor::create(remote_renderer_->get_window());
+    executor_ = EventExecutor::create(screen_renderer_->get_window());
     stats_observer_ = StatsObserver::Create(stats_json_);
 
     cc_->set_peer_observer(pc_.get()); // recursive reference?
     pc_->set_signaling_observer(cc_.get());
     pc_->set_stats_observer(stats_observer_.get());
-    pc_->add_screen_video_source(remote_video_src_);
-    pc_->add_screen_sinks(remote_renderer_);
+    pc_->add_screen_video_source(screen_video_src_);
+    pc_->add_screen_sinks(screen_renderer_);
     auto cameras = CameraCapturer::GetDeviceList();
     if (!cameras.empty()) {
         logger::info("supported cameras: {}", cameras);
-        local_video_src_ =
+        camera_renderer_ = VideoRenderer::Create(camera_opts);
+        camera_video_src_ =
             CameraCapturer::Create({.width = 600,
                                     .height = 400,
                                     .fps = 30,
                                     .uniq = cameras[0].second.c_str()});
-        pc_->add_camera_video_source(local_video_src_);
-        pc_->add_camera_sinks(local_renderer_);
+        pc_->add_camera_video_source(camera_video_src_);
+        pc_->add_camera_sinks(camera_renderer_);
     }
 }
 
@@ -148,9 +148,9 @@ void MainWindow::run()
     };
 
     auto is_remote_event = [this](SDL_Event &e) {
-        return remote_renderer_ &&
+        return screen_renderer_ &&
                e.window.windowID ==
-                   SDL_GetWindowID(remote_renderer_->get_window());
+                   SDL_GetWindowID(screen_renderer_->get_window());
     };
 
     SDL_Event e;
@@ -189,9 +189,7 @@ void MainWindow::run()
         while (SDL_PollEvent(&e)) {
             if (e.type == SDL_QUIT) {
                 stop();
-            }
-
-            if (is_main_event(e)) {
+            } else if (is_main_event(e)) {
                 handle_main_event(e);
             } else if (is_remote_event(e)) {
                 handle_remote_event(e);
@@ -202,6 +200,7 @@ void MainWindow::run()
 
         process_mu_commands();
 
+        screen_renderer_->update_frame();
         //::usleep(12000);
     }
 
@@ -373,8 +372,11 @@ void MainWindow::login_window(mu_Context *ctx)
 void MainWindow::handle_main_event(const SDL_Event &e)
 {
     switch (e.type) {
+    case SDL_QUIT:
+        stop();
+        break;
     case SDL_WINDOWEVENT:
-        switch (e.window.type) {
+        switch (e.window.event) {
         case SDL_WINDOWEVENT_CLOSE:
             stop();
             break;
@@ -416,6 +418,18 @@ void MainWindow::handle_main_event(const SDL_Event &e)
     }
 }
 
+void MainWindow::handle_remote_event(const SDL_Event &e)
+{
+    if (e.type == SDL_WINDOWEVENT && e.window.event == SDL_WINDOWEVENT_CLOSE) {
+        disconnect();
+        return;
+    }
+    SDL_Event ev = e;
+    // TODO: handle failure
+    pc_->post_binary_message(reinterpret_cast<const uint8_t *>(&ev),
+                             sizeof(ev));
+}
+
 void MainWindow::process_mu_commands()
 {
     r_clear(mu_color(bg[0], bg[1], bg[2], 255));
@@ -437,12 +451,4 @@ void MainWindow::process_mu_commands()
         }
     }
     r_present();
-}
-
-void MainWindow::handle_remote_event(const SDL_Event &e)
-{
-    SDL_Event ev = e;
-    // TODO: handle failure
-    pc_->post_binary_message(reinterpret_cast<const uint8_t *>(&ev),
-                             sizeof(ev));
 }

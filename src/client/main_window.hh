@@ -55,10 +55,10 @@ class MainWindow
     std::unique_ptr<SignalClient> cc_ = nullptr;
     std::unique_ptr<PeerClient> pc_ = nullptr;
     std::unique_ptr<EventExecutor> executor_ = nullptr;
-    rtc::scoped_refptr<CameraCapturer> local_video_src_ = nullptr;
-    rtc::scoped_refptr<ScreenCapturer> remote_video_src_ = nullptr;
-    rtc::scoped_refptr<VideoRenderer> local_renderer_ = nullptr;
-    rtc::scoped_refptr<VideoRenderer> remote_renderer_ = nullptr;
+    rtc::scoped_refptr<CameraCapturer> camera_video_src_ = nullptr;
+    rtc::scoped_refptr<ScreenCapturer> screen_video_src_ = nullptr;
+    rtc::scoped_refptr<VideoRenderer> camera_renderer_ = nullptr;
+    rtc::scoped_refptr<VideoRenderer> screen_renderer_ = nullptr;
     rtc::scoped_refptr<StatsObserver> stats_observer_ = nullptr;
 
     // states

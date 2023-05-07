@@ -187,9 +187,9 @@ class X11EventExecutor : public EventExecutor
         /*                           kDelayMicros); */
         /*     break; */
         case SDL_EventType::SDL_KEYDOWN:
+            translateKeyseq(e, key_seq);
             logger::trace("recv keydown: {}, translated: {}",
                           SDL_GetKeyName(e.key.keysym.sym), key_seq);
-            translateKeyseq(e, key_seq);
             xdo_send_keysequence_window_down(xdo_, CURRENTWINDOW, &key_seq[0],
                                              kDelayMicros);
             // FIXME: handle last down event

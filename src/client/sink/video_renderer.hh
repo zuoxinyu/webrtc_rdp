@@ -60,6 +60,7 @@ struct VideoRenderer : VideoSink {
     SDL_Renderer *renderer_ = nullptr;
     SDL_Texture *texture_ = nullptr;
     GLuint textures_[3] = {0, 0, 0};
+    GLuint vao, vbo, ebo;
     GLuint program_ = 0;
     GLuint tex_buffer_ = 0;
     GLuint pos_buffer_ = 0;

@@ -28,8 +28,15 @@ static int text_height(mu_Font font) { return r_get_text_height(); }
 
 static mu_Context *init()
 {
-    SDL_Init(SDL_INIT_EVERYTHING);
-    TTF_Init();
+    rtc::LogMessage::LogToDebug(rtc::LS_ERROR);
+    logger::set_level(spdlog::level::debug);
+    logger::info("Hello dezk");
+
+    if (SDL_Init(SDL_INIT_EVERYTHING) || TTF_Init()) {
+        logger::critical("failed to init SDL or SDL_TTF: {}", SDL_GetError());
+        exit(EXIT_FAILURE);
+    }
+
     r_init();
     auto *ctx = new mu_Context;
     mu_init(ctx);
@@ -49,10 +56,6 @@ static const char *kDefaultPort = "DEFAULT_SIGNAL_PORT";
 
 int main(int argc, char *argv[])
 {
-    rtc::LogMessage::LogToDebug(rtc::LS_ERROR);
-    logger::set_level(spdlog::level::debug);
-    logger::info("Hello dezk");
-
     mu_Context *ctx = init();
     MainWindow wnd(ctx, argc, argv);
     wnd.run();
