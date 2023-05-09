@@ -2,8 +2,6 @@
 
 #include "video_sink.hh"
 
-#include <boost/lockfree/policies.hpp>
-#include <boost/lockfree/queue.hpp>
 #include <boost/thread/sync_queue.hpp>
 
 #include <GL/glew.h>
@@ -12,7 +10,7 @@
 #include "api/video/video_frame.h"
 #include "modules/desktop_capture/desktop_capture_types.h"
 
-struct VideoRenderer : VideoSink {
+struct VideoRenderer : public VideoSink {
   public:
     struct Config {
         std::string name = "video sink window";
@@ -23,52 +21,39 @@ struct VideoRenderer : VideoSink {
         bool hide = true;
     };
 
+    using FrameQueue =
+        boost::sync_queue<rtc::scoped_refptr<webrtc::VideoFrameBuffer>>;
+
   public:
     static rtc::scoped_refptr<VideoRenderer> Create(Config conf);
-
-  public:
-    explicit VideoRenderer(Config conf, SDL_Window *);
-    explicit VideoRenderer(Config conf);
     ~VideoRenderer() override;
-    webrtc::WindowId get_native_window_handle() const;
     SDL_Window *get_window() const { return window_; }
+    webrtc::WindowId get_native_window_handle() const;
     void update_frame();
 
-  private:
-    enum { Y = 0, U = 1, V = 2 };
-    GLuint create_texture();
-    GLuint create_buffer(int location, const float data[], size_t sz);
-    GLuint create_shader(unsigned typ, const std::string &code);
-    GLuint create_program(const std::string &vs, const std::string &fs);
-    void update_gl_textures(const void *ydata, const void *udata,
-                            const void *vdata);
-    void update_sdl_textures(const void *ydata, const void *udata,
-                             const void *vdata);
-    void dump_frame(const webrtc::VideoFrame &frame, int id = 0);
-
-  public:
     // impl VideoSinkInterface
     void OnFrame(const webrtc::VideoFrame &frame) override;
     // impl VideoSink
     void Start() override;
     void Stop() override;
 
+    // TODO: CRTP?
+    virtual void update_textures(const void *ydata, const void *udata,
+                                 const void *vdata) = 0;
+
+  protected:
+    explicit VideoRenderer(Config conf);
+
   private:
+    void dump_frame(const webrtc::VideoFrame &frame, int id = 0);
+
+  protected:
     // resources
     SDL_Window *window_ = nullptr;
-    SDL_GLContext glctx_ = nullptr;
-    SDL_Renderer *renderer_ = nullptr;
-    SDL_Texture *texture_ = nullptr;
-    GLuint textures_[3] = {0, 0, 0};
-    GLuint vao, vbo, ebo;
-    GLuint program_ = 0;
-    GLuint tex_buffer_ = 0;
-    GLuint pos_buffer_ = 0;
     // properties
     Config conf_;
     // states
     bool running_ = false;
 
-    boost::sync_queue<rtc::scoped_refptr<webrtc::VideoFrameBuffer>>
-        frame_queue_;
+    FrameQueue frame_queue_;
 };

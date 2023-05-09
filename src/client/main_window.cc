@@ -142,15 +142,16 @@ void MainWindow::stop() { running_ = false; }
 void MainWindow::run()
 {
     running_ = true;
+    auto main_id = SDL_GetWindowID(r_get_window());
+    auto desk_id = SDL_GetWindowID(screen_renderer_->get_window());
 
-    auto is_main_event = [](SDL_Event &e) {
-        return e.window.windowID == SDL_GetWindowID(r_get_window());
+    auto is_main_event = [main_id](SDL_Event &e) {
+        return e.window.windowID == main_id || e.type == SDL_CLIPBOARDUPDATE;
     };
 
-    auto is_remote_event = [this](SDL_Event &e) {
+    auto is_remote_event = [this, desk_id](SDL_Event &e) {
         return screen_renderer_ &&
-               e.window.windowID ==
-                   SDL_GetWindowID(screen_renderer_->get_window());
+               (e.window.windowID == desk_id || e.drop.windowID == desk_id);
     };
 
     SDL_Event e;
@@ -415,19 +416,38 @@ void MainWindow::handle_main_event(const SDL_Event &e)
         }
         break;
     }
+    case SDL_CLIPBOARDUPDATE:
+        char *clip_text = SDL_GetClipboardText();
+        logger::debug("clip board updated: {}", clip_text);
+        SDL_free(clip_text);
+        break;
     }
 }
 
 void MainWindow::handle_remote_event(const SDL_Event &e)
 {
-    if (e.type == SDL_WINDOWEVENT && e.window.event == SDL_WINDOWEVENT_CLOSE) {
-        disconnect();
-        return;
+    switch (e.type) {
+    case SDL_WINDOWEVENT:
+        if (e.window.event == SDL_WINDOWEVENT_CLOSE) {
+            disconnect();
+            return;
+        }
+        break;
+    case SDL_DROPBEGIN:
+    case SDL_DROPCOMPLETE:
+        logger::debug("begin or end dropping: {}", e.drop.type);
+        break;
+    case SDL_DROPFILE: {
+        char *file_name = e.drop.file;
+        SDL_free(file_name);
+    } break;
+    default: {
+        SDL_Event ev = e;
+        pc_->post_binary_message(reinterpret_cast<const uint8_t *>(&ev),
+                                 sizeof(ev));
+    } break;
     }
-    SDL_Event ev = e;
     // TODO: handle failure
-    pc_->post_binary_message(reinterpret_cast<const uint8_t *>(&ev),
-                             sizeof(ev));
 }
 
 void MainWindow::process_mu_commands()
