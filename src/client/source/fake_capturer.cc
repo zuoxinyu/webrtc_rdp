@@ -5,11 +5,11 @@
 #include "modules/video_capture/video_capture_factory.h"
 
 extern "C" {
-#include <third_party/ffmpeg/libavcodec/avcodec.h>
-#include <third_party/ffmpeg/libavcodec/codec.h>
-#include <third_party/ffmpeg/libavcodec/packet.h>
-#include <third_party/ffmpeg/libavformat/avformat.h>
-#include <third_party/ffmpeg/libavutil/frame.h>
+#include <libavcodec/avcodec.h>
+#include <libavcodec/codec.h>
+#include <libavcodec/packet.h>
+#include <libavformat/avformat.h>
+#include <libavutil/frame.h>
 }
 
 class FakeCapturerImpl : public VideoSource

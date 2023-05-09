@@ -1,3 +1,4 @@
+#ifdef __linux__
 #include "event_executor.hh"
 #include "logger.hh"
 
@@ -9,8 +10,8 @@
 #include <xdo.h>
 
 static const struct {
-    SDL_Scancode scancode;
-    KeySym keysym;
+  SDL_Scancode scancode;
+  KeySym keysym;
 } KeySymToSDLScancode[] = {
     {SDL_SCANCODE_RETURN, XK_Return},
     {SDL_SCANCODE_ESCAPE, XK_Escape},
@@ -120,149 +121,119 @@ static const struct {
     {SDL_SCANCODE_RIGHTBRACKET, XK_bracketright},
 };
 
-static KeySym SDLScancodeToX11Keysym(SDL_Scancode scancode)
-{
-    KeySym keysym;
-    if (scancode >= SDL_SCANCODE_A && scancode <= SDL_SCANCODE_Z) {
-        return XK_a + (scancode - SDL_SCANCODE_A);
-    }
-    if (scancode >= SDL_SCANCODE_A && scancode <= SDL_SCANCODE_Z) {
-        return XK_a + (scancode - SDL_SCANCODE_A);
-    }
-    if (scancode == SDL_SCANCODE_0) {
-        return XK_0;
-    }
-    if (scancode >= SDL_SCANCODE_1 && scancode <= SDL_SCANCODE_9) {
-        return XK_1 + (scancode - SDL_SCANCODE_1);
-    }
+static KeySym SDLScancodeToX11Keysym(SDL_Scancode scancode) {
+  KeySym keysym;
+  if (scancode >= SDL_SCANCODE_A && scancode <= SDL_SCANCODE_Z) {
+    return XK_a + (scancode - SDL_SCANCODE_A);
+  }
+  if (scancode >= SDL_SCANCODE_A && scancode <= SDL_SCANCODE_Z) {
+    return XK_a + (scancode - SDL_SCANCODE_A);
+  }
+  if (scancode == SDL_SCANCODE_0) {
+    return XK_0;
+  }
+  if (scancode >= SDL_SCANCODE_1 && scancode <= SDL_SCANCODE_9) {
+    return XK_1 + (scancode - SDL_SCANCODE_1);
+  }
 
-    for (auto i : KeySymToSDLScancode) {
-        if (scancode == i.scancode) {
-            return i.keysym;
-        }
+  for (auto i : KeySymToSDLScancode) {
+    if (scancode == i.scancode) {
+      return i.keysym;
     }
-    return NoSymbol;
+  }
+  return NoSymbol;
 }
 
 static constexpr int kDelayMicros = 12000;
 
-class X11EventExecutor : public EventExecutor
-{
-  public:
-    X11EventExecutor(SDL_Window *win) : win_(win)
-    {
-        xdo_ = xdo_new(nullptr);
-        SDL_GetWindowSize(win_, &width_, &height_);
-    }
-    ~X11EventExecutor() override { xdo_free(xdo_); }
-
-    auto execute(EventExecutor::Event ev) -> bool override
-    {
-        SDL_Event e = ev.native_ev;
-        int x, y, screen_num;
-        Pos pos = {0, 0};
-        static char key_seq[32] = {0};
-        xdo_get_mouse_location(xdo_, &x, &y, &screen_num);
-        switch (e.type) {
-        case SDL_EventType::SDL_MOUSEMOTION:
-            pos = translate(e.motion.x, e.motion.y);
-            xdo_move_mouse(xdo_, pos.x, pos.y, screen_num);
-            break;
-        case SDL_EventType::SDL_MOUSEBUTTONDOWN:
-            xdo_mouse_down(xdo_, CURRENTWINDOW, e.button.button);
-            break;
-        case SDL_EventType::SDL_MOUSEBUTTONUP:
-            xdo_mouse_up(xdo_, CURRENTWINDOW, e.button.button);
-            break;
-        case SDL_EventType::SDL_MOUSEWHEEL:
-            xdo_click_window(xdo_, CURRENTWINDOW, e.wheel.y > 0 ? 4 : 5);
-            break;
-        // TODO: clipboard support
-        // TODO: input method support
-        /* case SDL_EventType::SDL_TEXTEDITING: */
-        /* case SDL_EventType::SDL_TEXTEDITING_EXT: */
-        /* case SDL_EventType::SDL_TEXTINPUT: */
-        /*     logger::debug("recv textinput: {}", e.text.text); */
-        /*     xdo_enter_text_window(xdo_, CURRENTWINDOW, &e.text.text[0], */
-        /*                           kDelayMicros); */
-        /*     break; */
-        case SDL_EventType::SDL_KEYDOWN:
-            translateKeyseq(e, key_seq);
-            logger::trace("recv keydown: {}, translated: {}",
-                          SDL_GetKeyName(e.key.keysym.sym), key_seq);
-            xdo_send_keysequence_window_down(xdo_, CURRENTWINDOW, &key_seq[0],
-                                             kDelayMicros);
-            // FIXME: handle last down event
-            break;
-        case SDL_EventType::SDL_KEYUP:
-            translateKeyseq(e, key_seq);
-            logger::trace("recv keyup: {}, translated: {}",
-                          SDL_GetKeyName(e.key.keysym.sym), key_seq);
-            // non mod keys only trigger keyup event unless on long pressing
-            xdo_send_keysequence_window(xdo_, CURRENTWINDOW, &key_seq[0],
-                                        kDelayMicros);
-            break;
-        default:
-            break;
-        }
-        return true;
-    }
-
-  private:
-    struct Pos {
-        int x;
-        int y;
-    };
-    auto translate(int x, int y) -> Pos
-    {
-        return Pos{static_cast<int>(
-                       ((double)x / (double)width_ * (double)remote_width_)),
-                   static_cast<int>((double)y / (double)height_ *
-                                    (double)remote_height_)};
-    }
-
-    auto translateKeyseq(const SDL_Event &e, char key_seq[32]) -> void
-    {
-        std::string seq;
-        /*
-        uint16_t mod = e.key.keysym.mod;
-        if (mod & KMOD_ALT) {
-            seq += "Alt+";
-        }
-        if (mod & KMOD_SHIFT) {
-            seq += "Shift+";
-        }
-        if (mod & KMOD_CTRL) {
-            seq += "Ctrl+";
-        }
-        if (mod & KMOD_MODE) {
-            seq += "Meta_L+";
-        }
-        if (mod & KMOD_CAPS) {
-            // TODO
-        }
-        */
-        const char *xkey =
-            XKeysymToString(SDLScancodeToX11Keysym(e.key.keysym.scancode));
-        seq += xkey ? xkey : "";
-        const char **keymap = xdo_get_symbol_map();
-
-        strcpy(&key_seq[0], seq.c_str());
-    }
-
-  private:
-    xdo_t *xdo_;
-    SDL_Window *win_;
-    int width_ = 0;
-    int height_ = 0;
-    int remote_width_ = 2560;
-    int remote_height_ = 1600;
-};
-
-// TODO: need local/remote resolutions
-auto EventExecutor::create(EventExecutor::WindowHandle handle)
-    -> std::unique_ptr<EventExecutor>
-{
-    return std::make_unique<X11EventExecutor>(
-        reinterpret_cast<SDL_Window *>(handle));
+X11EventExecutor::X11EventExecutor(SDL_Window *win) : win_(win) {
+  xdo_ = xdo_new(nullptr);
+  SDL_GetWindowSize(win_, &width_, &height_);
 }
+X11EventExecutor::~X11EventExecutor() override { xdo_free(xdo_); }
+
+auto X11EventExecutor::execute(EventExecutor::Event ev) -> bool override {
+  SDL_Event e = ev.native_ev;
+  int x, y, screen_num;
+  Pos pos = {0, 0};
+  static char key_seq[32] = {0};
+  xdo_get_mouse_location(xdo_, &x, &y, &screen_num);
+  switch (e.type) {
+  case SDL_EventType::SDL_MOUSEMOTION:
+    pos = translate(e.motion.x, e.motion.y);
+    xdo_move_mouse(xdo_, pos.x, pos.y, screen_num);
+    break;
+  case SDL_EventType::SDL_MOUSEBUTTONDOWN:
+    xdo_mouse_down(xdo_, CURRENTWINDOW, e.button.button);
+    break;
+  case SDL_EventType::SDL_MOUSEBUTTONUP:
+    xdo_mouse_up(xdo_, CURRENTWINDOW, e.button.button);
+    break;
+  case SDL_EventType::SDL_MOUSEWHEEL:
+    xdo_click_window(xdo_, CURRENTWINDOW, e.wheel.y > 0 ? 4 : 5);
+    break;
+  // TODO: clipboard support
+  // TODO: input method support
+  /* case SDL_EventType::SDL_TEXTEDITING: */
+  /* case SDL_EventType::SDL_TEXTEDITING_EXT: */
+  /* case SDL_EventType::SDL_TEXTINPUT: */
+  /*     logger::debug("recv textinput: {}", e.text.text); */
+  /*     xdo_enter_text_window(xdo_, CURRENTWINDOW, &e.text.text[0], */
+  /*                           kDelayMicros); */
+  /*     break; */
+  case SDL_EventType::SDL_KEYDOWN:
+    translateKeyseq(e, key_seq);
+    logger::trace("recv keydown: {}, translated: {}",
+                  SDL_GetKeyName(e.key.keysym.sym), key_seq);
+    xdo_send_keysequence_window_down(xdo_, CURRENTWINDOW, &key_seq[0],
+                                     kDelayMicros);
+    // FIXME: handle last down event
+    break;
+  case SDL_EventType::SDL_KEYUP:
+    translateKeyseq(e, key_seq);
+    logger::trace("recv keyup: {}, translated: {}",
+                  SDL_GetKeyName(e.key.keysym.sym), key_seq);
+    // non mod keys only trigger keyup event unless on long pressing
+    xdo_send_keysequence_window(xdo_, CURRENTWINDOW, &key_seq[0], kDelayMicros);
+    break;
+  default:
+    break;
+  }
+  return true;
+}
+
+auto X11EventExecutor::translate(int x, int y) -> Pos {
+  return Pos{
+      static_cast<int>(((double)x / (double)width_ * (double)remote_width_)),
+      static_cast<int>((double)y / (double)height_ * (double)remote_height_)};
+}
+
+auto X11EventExecutor::translateKeyseq(const SDL_Event &e, char key_seq[32])
+    -> void {
+  std::string seq;
+  /*
+  uint16_t mod = e.key.keysym.mod;
+  if (mod & KMOD_ALT) {
+      seq += "Alt+";
+  }
+  if (mod & KMOD_SHIFT) {
+      seq += "Shift+";
+  }
+  if (mod & KMOD_CTRL) {
+      seq += "Ctrl+";
+  }
+  if (mod & KMOD_MODE) {
+      seq += "Meta_L+";
+  }
+  if (mod & KMOD_CAPS) {
+      // TODO
+  }
+  */
+  const char *xkey =
+      XKeysymToString(SDLScancodeToX11Keysym(e.key.keysym.scancode));
+  seq += xkey ? xkey : "";
+  const char **keymap = xdo_get_symbol_map();
+
+  strcpy(&key_seq[0], seq.c_str());
+}
+#endif

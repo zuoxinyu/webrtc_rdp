@@ -3,17 +3,24 @@ add_rules('mode.debug', 'mode.release')
 set_toolchains('clang', 'yasm')
 set_defaultmode("debug")
 
+local vcpkg_dir = 'D:/DevEnv/vcpkg/installed/x64-windows'
+local vcpkg_inc_dir = path.join(vcpkg_dir, 'include')
+local vcpkg_lib_dir = path.join(vcpkg_dir, 'lib')
 local webrtc_dir = '../webrtc'
 local webrtc_src_dir = path.join(webrtc_dir, 'src')
+local webrtc_third_party_dirs = {
+    path.join(webrtc_src_dir, 'third_party', 'abseil-cpp'),
+}
 local webrtc_out_dir = 'out/linux-debug'
+local boost_dir = 'D:/DevEnv/Libs/boost_1_81_0'
 if is_os('linux') then
-    if is_mode('rlease') then
+    if is_mode('release') then
         webrtc_out_dir = 'out/linux-release'
     elseif is_mode('debug') then
         webrtc_out_dir = 'out/linux-debug'
     end
 elseif is_os('windows') then
-    if is_mode('rlease') then
+    if is_mode('release') then
         webrtc_out_dir = 'out/windows-release'
     elseif is_mode('debug') then
         webrtc_out_dir = 'out/windows-debug'
@@ -37,14 +44,24 @@ local check_cmd = [[git checkout -b m113 refs/remotes/branch-heads/5672]]
 local gn_cmd = string.format([[gn gen %s --args="%s"]], webrtc_out_dir, table.concat(gn_args, ' '))
 local ninja_cmd = string.format([[ninja -C %s]], webrtc_out_dir)
 
-add_requires('SDL2', 'spdlog')
-add_requires('boost', {
-    configs = {
-        json = true,
-        presets = { Boost_USE_STATIC_LIB = true }
-    }
-})
-add_requires('boost_json', 'boost_url')
+if is_os('linux') then
+    add_requires('SDL2', 'spdlog')
+    add_requires('boost', {
+        configs = {
+            json = true,
+            presets = { Boost_USE_STATIC_LIB = true }
+        }
+    })
+    add_requires('boost_json', 'boost_url')
+elseif is_os('windows') then
+    add_requires('vcpkg::sdl2', {alias = 'sdl2'})
+    add_requires('vcpkg::spdlog', {alias = 'spdlog'})
+    -- add_requires('vcpkg::ffmpeg[avcodec]', {alias = 'avcodec'})
+    -- add_requires('vcpkg::ffmpeg[avutil]', {alias = 'avutil'})
+    -- add_requires('vcpkg::ffmpeg[avdevice]', {alias = 'avdevice'})
+    -- add_requires('vcpkg::ffmpeg[avformat]', {alias = 'avformat'})
+    add_requires('glew')
+end
 
 target('dezk', function()
     set_default(true)
@@ -55,20 +72,26 @@ target('dezk', function()
     add_files('src/client/**.cc', 'src/client/**.c')
     remove_files("**_test.cc")
 
-    add_packages('boost_json', 'boost_url', 'boost_beast', 'spdlog', 'SDL2')
-    add_syslinks('avcodec', 'avutil', 'avformat')
     add_linkdirs(webrtc_obj_dir)
     add_links('webrtc')
 
     if is_os('linux') then
         add_defines('WEBRTC_POSIX', 'WEBRTC_LINUX', 'WEBRTC_USE_X11', 'RTC_DISABLE_LOGGING')
         add_cxxflags('-Wno-deprecated-declarations')
+        add_packages('boost_json', 'boost_url', 'boost_beast', 'spdlog', 'SDL2')
+        add_syslinks('avcodec', 'avutil', 'avformat')
         add_syslinks('dbus-1', 'glib-2.0', 'gobject-2.0', 'gmodule-2.0', 'gio-2.0', 'gbm')
         add_syslinks('xdo', 'xcb', 'X11', 'Xext', 'Xfixes', 'Xdamage', 'Xrandr', 'Xrender', 'Xau', 'Xdmcp', 'Xcomposite',
             'Xtst')
         add_syslinks('rt', 'atomic', 'GL', 'GLEW', 'drm', 'SDL2_ttf')
     elseif is_os('windows') then
-        add_defines('WEBRTC_WIN', 'NOMINMAX', '_WIN32_WINNT=0x0601')
+        add_includedirs(boost_dir)
+        add_includedirs(webrtc_third_party_dirs)
+        add_includedirs(vcpkg_inc_dir)
+        add_linkdirs(vcpkg_lib_dir)
+        add_packages('glew', 'spdlog', 'sdl2')
+        add_syslinks('avcodec', 'avutil', 'avformat')
+        add_defines('WEBRTC_WIN', 'NOMINMAX', '_WIN32_WINNT=0x0601', '_CRT_SECURE_NO_WARNINGS')
     end
 
     after_build(function(target)
@@ -101,26 +124,6 @@ target('video_player_test', function()
     add_linkdirs(webrtc_obj_dir)
     add_links('webrtc')
 end)
-
--- target('webrtc', function()
---     set_kind('static')
---     set_languages('c17', 'cxx17')
---     add_rules('c++')
---     set_targetdir('libwebrtc/debug')
---     add_files(webrtc_obj_dir .. '/**.o')
---
---     remove_files(webrtc_obj_dir .. '/third_party/yasm/gen*/**.o')
---     remove_files(webrtc_obj_dir .. '/third_party/yasm/re2c/**.o')
---     remove_files(webrtc_obj_dir .. '/third_party/yasm/yasm/**.o')
---     remove_files(webrtc_obj_dir .. '/third_party/protobuf/protoc/*.o')
---     remove_files(webrtc_obj_dir .. '/third_party/protobuf/protobuf_full/*.o')
---     remove_files(webrtc_obj_dir .. '/webrtc/examples/**.o')
---     remove_files(webrtc_obj_dir .. '/webrtc/modules/audio_coding/delay_test/utility.o')
---     remove_files(webrtc_obj_dir .. '/webrtc/modules/modules_tests/utility.o')
---     remove_files(webrtc_obj_dir .. '/webrtc/modules/video_capture/video_capture/video_capture_external.o')
---     remove_files(webrtc_obj_dir .. '/webrtc/modules/video_capture/video_capture/device_info_external.o')
--- end)
-
 
 task('fetch-webrtc', function()
     on_run(function()
