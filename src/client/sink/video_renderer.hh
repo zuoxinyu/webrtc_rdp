@@ -2,7 +2,7 @@
 
 #include "video_sink.hh"
 
-//#include <queue>
+// #include <queue>
 #include <boost/thread/sync_queue.hpp>
 
 #include <GL/glew.h>
@@ -23,7 +23,6 @@ struct VideoRenderer : public VideoSink {
     };
 
     using FrameQueue =
-        // std::queue<rtc::scoped_refptr<webrtc::VideoFrameBuffer>>;
         boost::sync_queue<rtc::scoped_refptr<webrtc::VideoFrameBuffer>>;
 
   public:

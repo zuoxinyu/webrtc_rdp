@@ -64,6 +64,7 @@ end
 local check_cmd = string.format([[git checkout -b %s]], webrtc_branch)
 local gn_cmd = string.format([[gn gen %s --args="%s"]], webrtc_out_dir, table.concat(gn_args, ' '))
 local ninja_cmd = string.format([[ninja -C %s]], webrtc_out_dir)
+local mt_cmd = [[mt.exe -manifest .\dezk.manifest -outputresource:'.\build\windows\x64\debug\dezk.exe;#1']]
 
 function windows_options()
     -- clang windows workarounds

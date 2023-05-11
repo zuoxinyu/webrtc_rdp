@@ -163,6 +163,7 @@ bool PeerClient::create_peer_connection()
     bitrate_settings.min_bitrate_bps = kMinBitrate;
 
     server.uri = kDefaultSTUNServer;
+    config.disable_ipv6_on_wifi = true;
     config.servers.push_back(server);
     config.sdp_semantics = webrtc::SdpSemantics::kUnifiedPlan;
     config.network_preference = rtc::AdapterType::ADAPTER_TYPE_LOOPBACK;

@@ -5,6 +5,8 @@
 #include <cstring>
 #include <thread>
 
+#include <boost/asio.hpp>
+
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_keyboard.h>
 #include <SDL2/SDL_video.h>
@@ -141,15 +143,14 @@ void MainWindow::stop() { running_ = false; }
 
 void MainWindow::run()
 {
-    running_ = true;
     auto main_id = SDL_GetWindowID(r_get_window());
     auto desk_id = SDL_GetWindowID(screen_renderer_->get_window());
 
-    auto is_main_event = [main_id](SDL_Event &e) {
+    auto is_main_event = [main_id](SDL_Event &e) -> bool {
         return e.window.windowID == main_id || e.type == SDL_CLIPBOARDUPDATE;
     };
 
-    auto is_remote_event = [this, desk_id](SDL_Event &e) {
+    auto is_remote_event = [this, desk_id](SDL_Event &e) -> bool {
         return screen_renderer_ &&
                (e.window.windowID == desk_id || e.drop.windowID == desk_id);
     };
@@ -157,6 +158,7 @@ void MainWindow::run()
     SDL_Event e;
     EventExecutor::Event ee;
     std::optional<PeerClient::ChanMessage> msg;
+    auto work = boost::asio::make_work_guard(ioctx_);
 
     auto timer = SDL_AddTimer(
         5000,
@@ -169,9 +171,9 @@ void MainWindow::run()
         },
         this);
 
+    running_ = true;
     while (running_) {
-        ioctx_.restart();
-        while (!ioctx_.stopped() && ioctx_.poll()) {
+        while (ioctx_.poll()) {
             ;
         }
 
@@ -276,7 +278,8 @@ void MainWindow::chat_window(mu_Context *ctx)
 void MainWindow::peers_window(mu_Context *ctx)
 {
     auto peer_item = [this](mu_Context *ctx, const Peer &p) {
-        mu_layout_row(ctx, 6, std::vector<int>{80, 80, 50, 50, 50, 50}.data(), 25);
+        mu_layout_row(ctx, 6, std::vector<int>{80, 80, 50, 50, 50, 50}.data(),
+                      25);
         mu_label(ctx, p.name.c_str());
         mu_label(ctx, p.id.c_str());
 

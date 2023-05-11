@@ -11,3 +11,5 @@ build/
 third_party
 libwebrtc/
 compile_commands.json
+vs20*
+vsxmake*

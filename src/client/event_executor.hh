@@ -11,38 +11,33 @@ class EventExecutor
         SDL_Event native_ev;
     };
     using WindowHandle = void *;
-    static auto create(WindowHandle) -> std::unique_ptr<EventExecutor>;
-
-  public:
-    virtual ~EventExecutor() = default;
-
-    virtual auto execute(Event) -> bool = 0;
-};
-
-#ifdef __WINDOWS__
-class Win32Executor : public EventExecutor
-{
-  public:
-    Win32Executor(SDL_Window *win) : win_(win)
-    {
-        SDL_GetWindowSize(win_, &width_, &height_);
-    }
-    ~Win32Executor() override = default;
-
-    auto execute(EventExecutor::Event ev) -> bool override { return false; }
-
-  private:
     struct Pos {
         int x;
         int y;
     };
+    static auto create(WindowHandle) -> std::unique_ptr<EventExecutor>;
 
-  private:
+  public:
+    EventExecutor(SDL_Window *win);
+    virtual ~EventExecutor() = default;
+    virtual auto execute(Event) -> bool = 0;
+
+  protected:
     SDL_Window *win_;
     int width_ = 0;
     int height_ = 0;
     int remote_width_ = 2560;
     int remote_height_ = 1600;
+};
+
+#ifdef _WIN32 
+class Win32EventExecutor : public EventExecutor
+{
+  public:
+    Win32EventExecutor(SDL_Window *win) : EventExecutor(win) {}
+    ~Win32EventExecutor() override = default;
+
+    auto execute(EventExecutor::Event ev) -> bool override;
 };
 #endif
 
@@ -57,20 +52,9 @@ class X11EventExecutor : public EventExecutor
     auto execute(EventExecutor::Event ev) -> bool override;
 
   private:
-    struct Pos {
-        int x;
-        int y;
-    };
     auto translate(int x, int y) -> Pos;
-
     auto translateKeyseq(const SDL_Event &e, char key_seq[32]) -> void;
 
-  private:
     xdo_t *xdo_;
-    SDL_Window *win_;
-    int width_ = 0;
-    int height_ = 0;
-    int remote_width_ = 2560;
-    int remote_height_ = 1600;
 };
 #endif

@@ -89,8 +89,8 @@ awaitable<void> SignalClient::wait_message()
     auto server =
         asio::ip::tcp::endpoint(make_address_v4(conf_.host), conf_.port);
     try {
-        stream_.expires_never();
-        co_await stream_.async_connect(server, use_awaitable);
+        // stream_.expires_never();
+        // co_await stream_.async_connect(server, use_awaitable);
         while (online()) {
             co_await handle_pending_messages();
 
@@ -130,11 +130,11 @@ awaitable<void> SignalClient::wait_message()
         }
     } catch (beast::system_error &se) {
         if (se.code() == http::error::end_of_stream) {
-            logger::error("login failed: server closed");
+            logger::error("wait failed: server closed");
         } else if (se.code() == asio::error::connection_refused) {
-            logger::error("login failed: connectioin refused");
+            logger::error("wait failed: connectioin refused");
         } else {
-            logger::error("login failed: {}", se.what());
+            logger::error("wait failed: {}", se.what());
         }
         do_logout();
         co_return;

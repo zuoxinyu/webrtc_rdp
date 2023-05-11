@@ -5,3 +5,4 @@
 #include <spdlog/fmt/ranges.h>
 
 namespace logger = spdlog;
+

@@ -25,7 +25,7 @@ rtc::scoped_refptr<VideoRenderer> VideoRenderer::Create(Config conf)
 VideoRenderer::VideoRenderer(Config conf) : conf_(std::move(conf))
 {
     running_ = !conf.hide;
-    uint32_t flags = SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI;
+    uint32_t flags = SDL_WINDOW_OPENGL;// | SDL_WINDOW_ALLOW_HIGHDPI;
     if (conf_.hide)
         flags |= SDL_WINDOW_HIDDEN;
 
@@ -55,7 +55,7 @@ webrtc::WindowId VideoRenderer::get_native_window_handle() const
     SDL_GetWindowWMInfo(window_, &info);
 #ifdef __linux__
     return info.info.x11.window;
-#elif defined __WINDOWS__
+#elif defined _WIN32
     return reinterpret_cast<intptr_t>(info.info.win.window);
 #endif
 }

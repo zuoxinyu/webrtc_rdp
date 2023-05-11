@@ -147,11 +147,11 @@ static KeySym SDLScancodeToX11Keysym(SDL_Scancode scancode)
 
 static constexpr int kDelayMicros = 12000;
 
-X11EventExecutor::X11EventExecutor(SDL_Window *win) : win_(win)
+X11EventExecutor::X11EventExecutor(SDL_Window *win) : EventExecutor(win)
 {
     xdo_ = xdo_new(nullptr);
-    SDL_GetWindowSize(win_, &width_, &height_);
 }
+
 X11EventExecutor::~X11EventExecutor() { xdo_free(xdo_); }
 
 auto X11EventExecutor::execute(EventExecutor::Event ev) -> bool
