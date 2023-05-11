@@ -47,6 +47,7 @@ class Win32Executor : public EventExecutor
 #endif
 
 #ifdef __linux__
+using xdo_t = struct xdo;
 class X11EventExecutor : public EventExecutor
 {
   public:
@@ -71,5 +72,5 @@ class X11EventExecutor : public EventExecutor
     int height_ = 0;
     int remote_width_ = 2560;
     int remote_height_ = 1600;
-}
+};
 #endif
