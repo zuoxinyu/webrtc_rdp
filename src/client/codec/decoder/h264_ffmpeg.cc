@@ -13,6 +13,11 @@ extern "C" {
 #include "modules/video_coding/include/video_error_codes.h"
 #include "rtc_base/time_utils.h"
 
+#ifdef _MSC_VER 
+#undef av_err2str
+#define av_err2str(r) (r)
+#endif
+
 FFMPEGDecoder::FFMPEGDecoder(const webrtc::SdpVideoFormat &format)
 {
     logger::debug("create decoder, format: {}", format.ToString());
@@ -29,7 +34,7 @@ bool FFMPEGDecoder::Configure(const webrtc::VideoDecoder::Settings &settings)
     int ret = avcodec_open2(avctx_, codec_, nullptr);
     if (ret < 0) {
         logger::error("failed to open codec: {}", "h264");
-        return WEBRTC_VIDEO_CODEC_ERROR;
+        return false;
     }
 
     packet_ = av_packet_alloc();

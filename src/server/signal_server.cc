@@ -13,6 +13,7 @@
 #include <boost/asio/use_awaitable.hpp>
 #include <boost/beast/core/buffers_to_string.hpp>
 #include <boost/beast/core/flat_buffer.hpp>
+#include <boost/json/src.hpp>
 #include <boost/json.hpp>
 #include <boost/json/serializer.hpp>
 #include <boost/url.hpp>

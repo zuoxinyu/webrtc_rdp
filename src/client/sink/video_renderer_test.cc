@@ -10,11 +10,15 @@ using namespace std::chrono_literals;
 
 void init()
 {
-    assert(SDL_Init(SDL_INIT_EVERYTHING) == 0);
+    assert(SDL_Init(SDL_INIT_VIDEO) == 0);
     // assert(glewInit() == 0);
 }
 
-int main()
+#ifdef main
+// #undef main
+#endif
+
+int main(int argc, char *argv[])
 {
     init();
 
@@ -54,4 +58,5 @@ int main()
     }
 
     fclose(yuv);
+    return 0;
 }

@@ -33,25 +33,16 @@ struct SignalClient : public SignalingObserver {
     };
 
     struct Config {
-        std::string name;
-        std::string host;
-        int port;
-        bool use_websocket;
-        std::chrono::duration<long> stream_expire_time;
-        std::chrono::duration<long> http_wait_time;
-    };
-
-    static constexpr Config kDefaultConfig{
-        "user",
-        "127.0.0.1",
-        8888,
-        false,
-        std::chrono::seconds(30),
-        std::chrono::seconds(1),
+        std::string name = "user";
+        std::string host = "127.0.0.1";
+        int port = 8888;
+        bool use_websocket = false;
+        std::chrono::duration<long> stream_expire_time = std::chrono::seconds(30);
+        std::chrono::duration<long> http_wait_time = std::chrono::seconds(1);
     };
 
   public:
-    explicit SignalClient(io_context &ctx, Config conf = kDefaultConfig);
+    explicit SignalClient(io_context &ctx, Config conf);
     ~SignalClient();
 
   public:
@@ -103,6 +94,6 @@ struct SignalClient : public SignalingObserver {
     Config conf_;
     Peer::List peers_;
     std::optional<Peer::Id> current_peer_;
-    Peer me_ = {kDefaultConfig.name, "-1", false};
+    Peer me_ = {"user", "-1", false};
     std::queue<PendingMessage> pending_messages_;
 };

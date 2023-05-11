@@ -53,7 +53,11 @@ webrtc::WindowId VideoRenderer::get_native_window_handle() const
     SDL_SysWMinfo info;
     SDL_VERSION(&info.version)
     SDL_GetWindowWMInfo(window_, &info);
+#ifdef __linux__
     return info.info.x11.window;
+#elif defined __WINDOWS__
+    return reinterpret_cast<intptr_t>(info.info.win.window);
+#endif
 }
 
 // running on capture thread (local) or worker thread (remote)?

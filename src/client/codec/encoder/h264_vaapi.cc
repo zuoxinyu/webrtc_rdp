@@ -13,6 +13,11 @@ extern "C" {
 #include "modules/video_coding/include/video_codec_interface.h"
 #include "modules/video_coding/include/video_error_codes.h"
 
+#ifdef _MSC_VER
+#undef av_err2str
+#define av_err2str(r) (r)
+#endif
+
 using webrtc::VideoCodecMode;
 using webrtc::VideoCodecType;
 using webrtc::VideoFrameType;

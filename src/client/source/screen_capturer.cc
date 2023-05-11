@@ -98,7 +98,9 @@ class ScreenCaptureImpl : public VideoSource,
 
     void capture_thread()
     {
+#ifdef __linux__
         prctl(PR_SET_NAME, reinterpret_cast<unsigned long>("screen_capture"));
+#endif
         logger::debug("start capture thread");
         while (running()) {
             desktop_capturer_->CaptureFrame();

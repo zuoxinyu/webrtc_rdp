@@ -37,7 +37,7 @@ Diagnostics:
   UnusedIncludes: Strict
   ClangTidy:
     Add: [performance*, modernize*, ]
-    Remove: [ modernize-use-nodiscard, modernize-deprecated-headers, modernize-avoid-c-arrays, readability-*]
+    Remove: [ modernize-use-nodiscard, modernize-use-trailing-return-type, modernize-deprecated-headers, modernize-avoid-c-arrays, readability-*]
 
 ---
 

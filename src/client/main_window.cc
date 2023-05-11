@@ -58,8 +58,8 @@ MainWindow::MainWindow(mu_Context *ctx, int argc, char *argv[]) : ctx_(ctx)
 
     chatbuf_.reserve(6400);
 
-    pc_ = make_unique<PeerClient>(pc_conf_);
-    cc_ = std::make_unique<SignalClient>(ioctx_);
+    pc_ = std::make_unique<PeerClient>(pc_conf_);
+    cc_ = std::make_unique<SignalClient>(ioctx_, SignalClient::Config());
     screen_renderer_ = VideoRenderer::Create(desktop_opts);
     screen_video_src_ = ScreenCapturer::Create(capture_opts);
 
@@ -226,10 +226,10 @@ void MainWindow::process_mu_windows()
 void MainWindow::stats_window(mu_Context *ctx)
 {
     if (mu_begin_window(ctx, "Stats", mu_rect(400, 0, 800, 800))) {
-        mu_layout_row(ctx, 1, (int[]){-1}, -25);
+        mu_layout_row(ctx, 1, std::vector<int>{-1}.data(), -25);
         mu_begin_panel(ctx, "Stats Panel");
         mu_Container *panel = mu_get_current_container(ctx);
-        mu_layout_row(ctx, 1, (int[]){-1}, -1);
+        mu_layout_row(ctx, 1, std::vector<int>{-1}.data(), -1);
         mu_text(ctx, stats_json_.c_str());
         mu_end_panel(ctx);
         mu_end_window(ctx);
@@ -241,10 +241,10 @@ void MainWindow::chat_window(mu_Context *ctx)
     std::string title = "Chat vs " + cc_->peer().name;
 
     if (mu_begin_window(ctx, title.c_str(), mu_rect(400, 0, 800, 800))) {
-        mu_layout_row(ctx, 1, (int[]){-1}, -25);
+        mu_layout_row(ctx, 1, std::vector<int>{-1}.data(), -25);
         mu_begin_panel(ctx, "Log Output");
         mu_Container *panel = mu_get_current_container(ctx);
-        mu_layout_row(ctx, 1, (int[]){-1}, -1);
+        mu_layout_row(ctx, 1, std::vector<int>{-1}.data(), -1);
         mu_text(ctx, chatbuf_.data());
         mu_end_panel(ctx);
         if (chatbuf_updated_) {
@@ -255,7 +255,7 @@ void MainWindow::chat_window(mu_Context *ctx)
         /* input textbox + submit button */
         static char buf[128];
         int submitted = 0;
-        mu_layout_row(ctx, 2, (int[]){-70, -1}, 0);
+        mu_layout_row(ctx, 2, std::vector<int>{-70, -1}.data(), 0);
         if (mu_textbox(ctx, buf, sizeof(buf)) & MU_RES_SUBMIT) {
             mu_set_focus(ctx, ctx->last_id);
             submitted = 1;
@@ -276,7 +276,7 @@ void MainWindow::chat_window(mu_Context *ctx)
 void MainWindow::peers_window(mu_Context *ctx)
 {
     auto peer_item = [this](mu_Context *ctx, const Peer &p) {
-        mu_layout_row(ctx, 6, (int[]){80, 80, 50, 50, 50, 50}, 25);
+        mu_layout_row(ctx, 6, std::vector<int>{80, 80, 50, 50, 50, 50}.data(), 25);
         mu_label(ctx, p.name.c_str());
         mu_label(ctx, p.id.c_str());
 
@@ -303,7 +303,7 @@ void MainWindow::peers_window(mu_Context *ctx)
 
     if (mu_begin_window(ctx, "Online Peers", mu_rect(0, 0, 400, 600))) {
         if (mu_header_ex(ctx, "Online Peers", MU_OPT_EXPANDED)) {
-            mu_layout_row(ctx, 3, (int[]){80, 80, -1}, 30);
+            mu_layout_row(ctx, 3, std::vector<int>{80, 80, -1}.data(), 30);
             mu_label(ctx, "Name");
             mu_label(ctx, "ID");
             mu_label(ctx, "Actions");
@@ -323,7 +323,7 @@ void MainWindow::login_window(mu_Context *ctx)
 
     if (mu_begin_window(ctx, "Login", mu_rect(0, 600, 400, 200))) {
         {
-            mu_layout_row(ctx, 2, (int[]){150, 150}, 25);
+            mu_layout_row(ctx, 2, std::vector<int>{150, 150}.data(), 25);
             if (mu_checkbox(ctx, "voice", &voice_enabled)) {
             }
 
@@ -350,7 +350,7 @@ void MainWindow::login_window(mu_Context *ctx)
                 submit = 1;
             }
 
-            mu_layout_row(ctx, 1, (int[]){-1}, 25);
+            mu_layout_row(ctx, 1, std::vector<int>{-1}.data(), 25);
             if (mu_button(ctx, "Login")) {
                 submit = 1;
             }
@@ -361,7 +361,7 @@ void MainWindow::login_window(mu_Context *ctx)
         }
 
         mu_layout_height(ctx, -1);
-        mu_layout_row(ctx, 1, (int[]){-1}, 25);
+        mu_layout_row(ctx, 1, std::vector<int>{-1}.data(), 25);
         if (mu_button(ctx, "Exit")) {
             stop();
         }
