@@ -34,10 +34,13 @@ class EventExecutor
 class Win32EventExecutor : public EventExecutor
 {
   public:
-    Win32EventExecutor(SDL_Window *win) : EventExecutor(win) {}
+    Win32EventExecutor(SDL_Window *win);
     ~Win32EventExecutor() override = default;
 
     auto execute(EventExecutor::Event ev) -> bool override;
+  private:
+    int desktop_width;
+    int desktop_height;
 };
 #endif
 
