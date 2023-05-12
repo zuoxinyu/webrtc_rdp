@@ -19,8 +19,10 @@
 #include "modules/desktop_capture/desktop_capture_options.h"
 #include "modules/desktop_capture/desktop_capturer.h"
 
+#include <SDL2/SDL_video.h>
 #include <libyuv/convert.h>
 #include <libyuv/video_common.h>
+
 class ScreenCaptureImpl : public VideoSource,
                           public webrtc::DesktopCapturer::Callback
 {
@@ -167,6 +169,14 @@ class ScreenCaptureImpl : public VideoSource,
     rtc::scoped_refptr<webrtc::I420Buffer> scaled_buffer_;
     ScreenCapturer::Config conf_;
 };
+
+std::array<int, 2> ScreenCapturer::GetScreenSize()
+{
+    SDL_Rect rect;
+    SDL_GetDisplayBounds(0, &rect);
+
+    return {rect.w, rect.h};
+}
 
 rtc::scoped_refptr<ScreenCapturer> ScreenCapturer::Create(Config conf)
 {

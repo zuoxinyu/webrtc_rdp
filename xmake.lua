@@ -72,7 +72,11 @@ function windows_options()
     add_cxxflags('-fms-extensions')
     add_defines('SDL_MAIN_HANDLED')
     -- boost workarounds
-    add_defines('BOOST_ASIO_HAS_STD_COROUTINE', 'BOOST_ASIO_HAS_CO_AWAIT', 'BOOST_JSON_NO_LIB', 'BOOST_URL_NO_LIB')
+    add_defines(
+        'BOOST_ASIO_HAS_STD_COROUTINE',
+        'BOOST_ASIO_HAS_CO_AWAIT',
+        'BOOST_JSON_NO_LIB',
+        'BOOST_URL_NO_LIB')
     add_syslinks('kernel32', 'user32', 'gdi32', 'winspool', 'comdlg32', 'advapi32', 'shell32', 
         'ole32', 'oleaut32', 'uuid', 'secur32', 'strmiids', 'mfuuid', 'd3d11', 'wmcodecdspuuid', 'dmoguids',
         'odbc32', 'odbccp32', 'version', 'winmm', 'setupapi', 'imm32', 'iphlpapi', 'msdmo', 'shcore', 'dwmapi', 'dxgi')
@@ -84,9 +88,9 @@ if is_os('linux') then
     add_requires('SDL2', 'SDL2_ttf', 'glew')
     add_requires('avutil', 'avcodec', 'avformat')
 elseif is_os('windows') then
-    add_requires('boost-json', {alias = 'boost_json', system = true, debug=true})
     add_requires('boost-asio', {alias = 'boost_asio', system = true, debug=true})
     add_requires('boost-beast', {alias = 'boost_beast', system = true, debug=true})
+    add_requires('boost-json', {alias = 'boost_json', system = true, debug=true})
     add_requires('boost-url', {alias = 'boost_url', system = true, debug=true})
     add_requires('glew', {alias = 'glew', system = true})
     add_requires('opengl', {alias = 'GL', system = true})
@@ -134,7 +138,8 @@ target('dezk', function()
         add_includedirs(webrtc_third_party_dirs)
         add_packages('glew', 'spdlog', 'SDL2', 'SDL2_ttf', 'nlohmann-json', 'GL', 'freetype', 'zlib', 'liblzma', 'brotli', 'libpng', 'bzip2')
         add_packages('avcodec', 'avutil', 'avformat', 'x264')
-        add_packages('boost_json', 'boost_url', 'boost_beast')
+        add_packages('boost_asio', 'boost_json', 'boost_url')
+        add_packages('absl_flags')
         add_defines('WEBRTC_WIN', 'NOMINMAX', '_WIN32_WINNT=0x0601', '_CRT_SECURE_NO_WARNINGS', 'FMT_HEADER_ONLY')
         windows_options()
     end

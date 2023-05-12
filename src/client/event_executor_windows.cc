@@ -21,7 +21,7 @@ static auto translate(const SDL_MouseMotionEvent &e, int w, int h) -> INPUT
         .dwFlags =
             MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK,
         .time = 0,
-        .dwExtraInfo = 0,
+        .dwExtraInfo = 100,
     };
     return input;
 }
@@ -95,35 +95,32 @@ Win32EventExecutor::Win32EventExecutor(SDL_Window *win) : EventExecutor(win)
 
     desktop_width = rect.right;
     desktop_height = rect.bottom;
+    logger::debug("desktop screen size: {}*{}", desktop_width, desktop_height);
 }
 
+// TODO: bypass UIPI?
 auto Win32EventExecutor::execute(EventExecutor::Event ev) -> bool
 {
     SDL_Event e = ev.native_ev;
-    INPUT inputs[1] = {0};
+    INPUT input = {0};
     int sent;
     switch (e.type) {
     case SDL_EventType::SDL_MOUSEMOTION:
         logger::debug("windows recv motion: {},{}", e.motion.x, e.motion.y);
-        // inputs[0] = translate(e.motion, desktop_width, desktop_height);
-        // TODO: bypass UIPI?
-        // SendInput(1, inputs, sizeof(INPUT));
-        // sent = SDL_WarpMouseGlobal(e.motion.x, e.motion.y);
-        // if (!sent) {
-        //     logger::error("not support motion");
-        // }
+        input = translate(e.motion, desktop_width, desktop_height);
+        SendInput(1, &input, sizeof(INPUT));
         break;
     case SDL_EventType::SDL_MOUSEBUTTONDOWN:
-        inputs[0] = translate(e.button);
-        SendInput(1, inputs, sizeof(INPUT));
+        input = translate(e.button);
+        SendInput(1, &input, sizeof(INPUT));
         break;
     case SDL_EventType::SDL_MOUSEBUTTONUP:
-        inputs[0] = translate(e.button);
-        SendInput(1, inputs, sizeof(INPUT));
+        input = translate(e.button);
+        SendInput(1, &input, sizeof(INPUT));
         break;
     case SDL_EventType::SDL_MOUSEWHEEL:
-        inputs[0] = translate(e.wheel);
-        SendInput(1, inputs, sizeof(INPUT));
+        input = translate(e.wheel);
+        SendInput(1, &input, sizeof(INPUT));
         break;
     case SDL_EventType::SDL_KEYDOWN:
         break;

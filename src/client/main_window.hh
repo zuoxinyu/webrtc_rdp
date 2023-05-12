@@ -42,15 +42,21 @@ class MainWindow
     void connect(const Peer::Id &);
     void disconnect();
     void update_chat(const std::string &who, const char *buf);
+    void post_chat(const std::string& msg);
     void open_stats();
     void open_chat();
 
+    // misc
+    void parseEnvs();
+
   private:
+    // properties
     std::string title_;
     bool auto_login_ = false;
     mu_Context *ctx_ = nullptr;
     PeerClient::Config pc_conf_;
 
+    // resources
     boost::asio::io_context ioctx_;
     std::unique_ptr<SignalClient> cc_ = nullptr;
     std::unique_ptr<PeerClient> pc_ = nullptr;
@@ -63,6 +69,9 @@ class MainWindow
 
     // states
     bool running_ = false;
+    char hostbuf[16] = "127.0.0.1";
+    char portbuf[8] = "8888";
+    char namebuf[16] = "user";
     std::vector<char> chatbuf_;
     bool chatbuf_updated_ = false;
     bool show_stats_ = false;

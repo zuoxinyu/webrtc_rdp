@@ -196,7 +196,7 @@ void PeerClient::delete_peer_connection()
     if (screen_src_ && screen_src_->state() == VideoTrackSource::kLive)
         screen_src_->Stop();
     if (camera_sink_)
-        camera_sink_->Stop();
+        camera_sink_->Stop(); // TODO: move to RemoveSink?
     if (screen_sink_)
         screen_sink_->Stop();
 }
@@ -223,10 +223,6 @@ void PeerClient::create_transceivers()
                           trans.error().message());
         } else {
             trans.value()->receiver()->SetJitterBufferMinimumDelay(0.0);
-        }
-
-        if (screen_sink_) {
-            screen_sink_->Start();
         }
     }
 }
@@ -440,11 +436,13 @@ void PeerClient::OnTrack(
             screen_sink_) {
             video_track->AddOrUpdateSink(screen_sink_.get(),
                                          rtc::VideoSinkWants());
+            screen_sink_->Start();
         }
         if (transceiver->receiver()->stream_ids()[0] == kCameraVideoLabel &&
             camera_sink_) {
             video_track->AddOrUpdateSink(camera_sink_.get(),
                                          rtc::VideoSinkWants());
+            camera_sink_->Start();
         }
     } else if (track->kind() == webrtc::MediaStreamTrackInterface::kAudioKind) {
         auto audio_track = static_cast<webrtc::AudioTrackInterface *>(track);

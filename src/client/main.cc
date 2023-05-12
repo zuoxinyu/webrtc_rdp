@@ -28,7 +28,7 @@ static int text_height(mu_Font font) { return r_get_text_height(); }
 
 static mu_Context *init()
 {
-    rtc::LogMessage::LogToDebug(rtc::LS_ERROR);
+    rtc::LogMessage::LogToDebug(rtc::LS_INFO);
     logger::set_level(spdlog::level::debug);
     logger::info("Hello dezk");
 
@@ -45,14 +45,6 @@ static mu_Context *init()
 
     return ctx;
 }
-
-#ifdef WIN32
-#undef SDL_main
-#endif
-
-static const char *KDefaultName = "DEFAULT_SIGNAL_NAME";
-static const char *kDefaultServer = "DEFAULT_SIGNAL_SERVER";
-static const char *kDefaultPort = "DEFAULT_SIGNAL_PORT";
 
 int main(int argc, char *argv[])
 {
