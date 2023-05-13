@@ -106,7 +106,6 @@ auto Win32EventExecutor::execute(EventExecutor::Event ev) -> bool
     int sent;
     switch (e.type) {
     case SDL_EventType::SDL_MOUSEMOTION:
-        logger::debug("windows recv motion: {},{}", e.motion.x, e.motion.y);
         input = translate(e.motion, desktop_width, desktop_height);
         SendInput(1, &input, sizeof(INPUT));
         break;

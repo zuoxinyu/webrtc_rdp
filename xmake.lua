@@ -11,8 +11,8 @@ local webrtc_dir = '../webrtc'
 local webrtc_branch = 'm113 refs/remotes/branch-heads/5672'
 local webrtc_src_dir = path.join(webrtc_dir, 'src')
 local webrtc_third_party_dirs = {
-    path.join(webrtc_src_dir, 'third_party', 'abseil-cpp'),
-    path.join(webrtc_src_dir, 'third_party', 'libyuv'),
+    -- path.join(webrtc_src_dir, 'third_party', 'abseil-cpp'),
+    -- path.join(webrtc_src_dir, 'third_party', 'libyuv'),
 }
 local webrtc_out_dir = 'out/linux-debug'
 if is_os('linux') then
@@ -58,6 +58,7 @@ if is_os('windows') then
         'fatal_linker_warnings=false',
         'treat_warnings_as_errors=false',
         'enable_iterator_debugging=true',
+        -- no rtc_enable_symbol_export, which leads build errors
     }
 end
 
@@ -88,6 +89,7 @@ if is_os('linux') then
     add_requires('SDL2', 'SDL2_ttf', 'glew')
     add_requires('avutil', 'avcodec', 'avformat')
 elseif is_os('windows') then
+    add_requires('abseil', {system = true})
     add_requires('boost-asio', {alias = 'boost_asio', system = true, debug=true})
     add_requires('boost-beast', {alias = 'boost_beast', system = true, debug=true})
     add_requires('boost-json', {alias = 'boost_json', system = true, debug=true})
@@ -103,7 +105,6 @@ elseif is_os('windows') then
     add_requires('libyuv', {alias = 'libyuv', system = true})
     add_requires('ffmpeg[avcodec]', {alias = 'avcodec', system = true})
     add_requires('ffmpeg[avutil]', {alias = 'avutil', system = true})
-    add_requires('ffmpeg[avdevice]', {alias = 'avdevice', system = true})
     add_requires('ffmpeg[avformat]', {alias = 'avformat', system = true})
     add_requires('x264', {alias = 'x264', system = true})
     add_requires('zlib', {alias = 'zlib', system = true})
@@ -135,12 +136,11 @@ target('dezk', function()
             'Xtst')
         add_syslinks('rt', 'atomic', 'GL', 'GLEW', 'drm', 'SDL2_ttf')
     elseif is_os('windows') then
+        add_defines('WEBRTC_WIN', 'NOMINMAX', '_WIN32_WINNT=0x0601', '_CRT_SECURE_NO_WARNINGS', 'FMT_HEADER_ONLY')
         add_includedirs(webrtc_third_party_dirs)
         add_packages('glew', 'spdlog', 'SDL2', 'SDL2_ttf', 'nlohmann-json', 'GL', 'freetype', 'zlib', 'liblzma', 'brotli', 'libpng', 'bzip2')
         add_packages('avcodec', 'avutil', 'avformat', 'x264')
-        add_packages('boost_asio', 'boost_json', 'boost_url')
-        add_packages('absl_flags')
-        add_defines('WEBRTC_WIN', 'NOMINMAX', '_WIN32_WINNT=0x0601', '_CRT_SECURE_NO_WARNINGS', 'FMT_HEADER_ONLY')
+        add_packages('boost_asio', 'boost_json', 'boost_url', 'abseil')
         windows_options()
     end
 
@@ -149,8 +149,6 @@ target('dezk', function()
             os.exec('rsync %s notebook:dezk', target:targetfile())
         end)
     end
-
-    -- add_deps('webrtc')
 end)
 
 target('signal_server', function()

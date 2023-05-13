@@ -1,10 +1,10 @@
 CompileFlags:
   Add:
    - -ferror-limit=0
-   - -I/home/doubleleft/webrtc/src
+   - -I../webrtc/src
    - -Isrc
-   - -DWEBRTC_POSIX
-   - -DWEBRTC_LINUX
+   - -D__WINDOWS__
+   - -DWEBRTC_WIN
 
 Index:
   StandardLibrary: No
@@ -30,11 +30,14 @@ CompileFlags:
   Add:
    - -xc++
    - -std=c++20
+   - -ferror-limit=0
    - -Wno-deprecated-builtins
    - -Wno-deprecated-declarations
 
 Diagnostics:
   UnusedIncludes: Strict
+  Includes:
+    IgnoreHeader: logger\.hh
   ClangTidy:
     Add: [performance*, modernize*, ]
     Remove: [ modernize-use-nodiscard, modernize-use-trailing-return-type, modernize-deprecated-headers, modernize-avoid-c-arrays, readability-*]

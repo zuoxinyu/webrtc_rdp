@@ -25,6 +25,7 @@ struct PeerClient : private webrtc::PeerConnectionObserver,
         bool enable_control = true;
         bool enable_clipboard = false;
         bool enable_file_transfer = false;
+        std::vector<std::string> stun_servers = {};
     };
 
     struct ChanMessage {

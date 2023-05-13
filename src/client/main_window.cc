@@ -5,6 +5,7 @@
 #include <cstring>
 #include <thread>
 
+#include <absl/flags/flag.h>
 #include <boost/asio.hpp>
 
 #include <SDL2/SDL.h>
@@ -33,31 +34,34 @@ static const ScreenCapturer::Config capture_opts = {.fps = 60,
                                                     .height = 1600,
                                                     .keep_ratio = true,
                                                     .exlude_window_id = {}};
-
-void MainWindow::parseEnvs()
-{
-    if (auto name = ::getenv("SIGNAL_DEFAULT_NAME")) {
-        std::strcpy(namebuf, name);
-    }
-    if (auto host = ::getenv("SIGNAL_DEFAULT_HOST")) {
-        std::strcpy(hostbuf, host);
-    }
-    if (auto port = ::getenv("SIGNAL_DEFAULT_PORT")) {
-        std::strcpy(portbuf, port);
-    }
-}
+static const CameraCapturer::Config cameracap_opts = {
+    .width = 600, .height = 400, .fps = 30, .uniq = ""};
+ABSL_FLAG(std::string, user, "username", "signaling name");
+ABSL_FLAG(std::string, host, "10.10.10.133", "signal server host");
+ABSL_FLAG(int, port, 8888, "signal server port");
+ABSL_FLAG(bool, auto_login, true, "auto login");
+ABSL_FLAG(std::vector<std::string>, servers, {"stun:10.10.10.133"},
+          "stun servers");
+ABSL_FLAG(bool, use_opengl, true, "use OpenGL instead of SDL2");
+ABSL_FLAG(bool, use_h264, false, "use custom H264 codec implementation");
 
 MainWindow::MainWindow(mu_Context *ctx, int argc, char *argv[]) : ctx_(ctx)
 {
-    parseEnvs();
-    /* absl::ParseCommandLine(argc, argv); */
-
-    auto_login_ = argc > 1 && argv[1];
+    need_login_ = absl::GetFlag(FLAGS_auto_login);
 
     chatbuf_.reserve(6400);
+    pc_conf_.stun_servers = absl::GetFlag(FLAGS_servers);
+    pc_conf_.use_codec = absl::GetFlag(FLAGS_use_h264);
+    cc_conf_.host = absl::GetFlag(FLAGS_host);
+    cc_conf_.port = absl::GetFlag(FLAGS_port);
+    cc_conf_.name = absl::GetFlag(FLAGS_user);
+    std::strcpy(namebuf, absl::GetFlag(FLAGS_user).c_str());
+    std::strcpy(hostbuf, absl::GetFlag(FLAGS_host).c_str());
+    std::strcpy(portbuf, std::to_string(absl::GetFlag(FLAGS_port)).c_str());
 
+    // TODO: delay heavy works
     pc_ = std::make_unique<PeerClient>(pc_conf_);
-    cc_ = std::make_unique<SignalClient>(ioctx_, SignalClient::Config());
+    cc_ = std::make_unique<SignalClient>(ioctx_, cc_conf_);
     screen_renderer_ = VideoRenderer::Create(desktop_opts);
     screen_video_src_ = ScreenCapturer::Create(capture_opts);
 
@@ -72,12 +76,10 @@ MainWindow::MainWindow(mu_Context *ctx, int argc, char *argv[]) : ctx_(ctx)
     auto cameras = CameraCapturer::GetDeviceList();
     if (!cameras.empty()) {
         logger::info("supported cameras: {}", cameras);
+        auto opts = cameracap_opts;
+        opts.uniq = cameras[0].second.c_str();
         camera_renderer_ = VideoRenderer::Create(camera_opts);
-        camera_video_src_ =
-            CameraCapturer::Create({.width = 600,
-                                    .height = 400,
-                                    .fps = 30,
-                                    .uniq = cameras[0].second.c_str()});
+        camera_video_src_ = CameraCapturer::Create(opts);
         pc_->add_camera_video_source(camera_video_src_);
         pc_->add_camera_sinks(camera_renderer_);
     }
@@ -85,7 +87,7 @@ MainWindow::MainWindow(mu_Context *ctx, int argc, char *argv[]) : ctx_(ctx)
 
 void MainWindow::login()
 {
-    auto_login_ = false;
+    need_login_ = false;
 
     auto port = std::atoi(portbuf);
     auto host = std::string{hostbuf};
@@ -282,6 +284,7 @@ void MainWindow::handle_main_event(const SDL_Event &e)
 
 void MainWindow::handle_remote_event(const SDL_Event &e)
 {
+    SDL_Window *window = screen_renderer_->get_window();
     switch (e.type) {
     case SDL_WINDOWEVENT:
         if (e.window.event == SDL_WINDOWEVENT_CLOSE) {
@@ -295,8 +298,16 @@ void MainWindow::handle_remote_event(const SDL_Event &e)
         break;
     case SDL_DROPFILE: {
         char *file_name = e.drop.file;
+        logger::debug("transferring file: {}", file_name);
         SDL_free(file_name);
     } break;
+    case SDL_MOUSEBUTTONDOWN:
+        if (e.button.button == SDL_BUTTON_MIDDLE) {
+
+            SDL_SetWindowGrab(window,
+                              SDL_GetWindowGrab(window) ? SDL_FALSE : SDL_TRUE);
+            break;
+        }
     default: {
         SDL_Event ev = e;
         pc_->post_binary_message(reinterpret_cast<const uint8_t *>(&ev),

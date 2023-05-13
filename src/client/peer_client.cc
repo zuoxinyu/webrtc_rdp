@@ -12,7 +12,6 @@
 #include "api/video_codecs/builtin_video_encoder_factory.h"
 #include "api/video_codecs/video_encoder_factory.h"
 
-static const std::string kDefaultSTUNServer = "stun:stun1.l.google.com:19302";
 static const std::string kAudioLabel = "x-remote-track-audio";
 static const std::string kDataChanId = "x-remote-chan-input";
 static const std::string kCameraVideoLabel = "x-remote-track-camera";
@@ -155,20 +154,23 @@ PeerClient::~PeerClient()
 bool PeerClient::create_peer_connection()
 {
     webrtc::PeerConnectionInterface::RTCConfiguration config;
-    webrtc::PeerConnectionInterface::IceServer server;
     webrtc::BitrateSettings bitrate_settings;
 
     bitrate_settings.start_bitrate_bps = kStartBitrate;
     bitrate_settings.max_bitrate_bps = kMaxBitrate;
     bitrate_settings.min_bitrate_bps = kMinBitrate;
 
-    server.uri = kDefaultSTUNServer;
     config.disable_ipv6_on_wifi = true;
-    config.servers.push_back(server);
     config.sdp_semantics = webrtc::SdpSemantics::kUnifiedPlan;
-    config.network_preference = rtc::AdapterType::ADAPTER_TYPE_LOOPBACK;
-    config.screencast_min_bitrate = kMinBitrate;
-    config.audio_jitter_buffer_min_delay_ms = 0;
+    // config.network_preference = rtc::AdapterType::ADAPTER_TYPE_LOOPBACK;
+    // config.screencast_min_bitrate = kMinBitrate;
+    // config.audio_jitter_buffer_min_delay_ms = 0;
+
+    for (const auto &s : conf_.stun_servers) {
+        webrtc::PeerConnectionInterface::IceServer server;
+        server.uri = s;
+        config.servers.emplace_back(server);
+    }
 
     webrtc::PeerConnectionDependencies deps(this);
     auto err_or_pc =
@@ -212,6 +214,9 @@ void PeerClient::create_transceivers()
         if (!trans.ok()) {
             logger::error("failed to add transceiver: {}",
                           trans.error().message());
+        } else {
+            // trans.value()->receiver()->SetJitterBufferMinimumDelay(0.0);
+            camera_sink_->Start();
         }
     }
 
@@ -222,7 +227,8 @@ void PeerClient::create_transceivers()
             logger::error("failed to add transceiver: {}",
                           trans.error().message());
         } else {
-            trans.value()->receiver()->SetJitterBufferMinimumDelay(0.0);
+            // trans.value()->receiver()->SetJitterBufferMinimumDelay(0.0);
+            screen_sink_->Start();
         }
     }
 }
@@ -250,7 +256,7 @@ void PeerClient::create_media_tracks()
         if (!result.ok()) {
             logger::error("failed to add camera video track");
         } else {
-            set_encoding_params(result.MoveValue());
+            // set_encoding_params(result.MoveValue());
         }
     }
 
@@ -263,7 +269,7 @@ void PeerClient::create_media_tracks()
         if (!result.ok()) {
             logger::error("failed to add screen video track");
         } else {
-            set_encoding_params(result.MoveValue());
+            // set_encoding_params(result.MoveValue());
         }
     }
 
@@ -436,13 +442,11 @@ void PeerClient::OnTrack(
             screen_sink_) {
             video_track->AddOrUpdateSink(screen_sink_.get(),
                                          rtc::VideoSinkWants());
-            screen_sink_->Start();
         }
         if (transceiver->receiver()->stream_ids()[0] == kCameraVideoLabel &&
             camera_sink_) {
             video_track->AddOrUpdateSink(camera_sink_.get(),
                                          rtc::VideoSinkWants());
-            camera_sink_->Start();
         }
     } else if (track->kind() == webrtc::MediaStreamTrackInterface::kAudioKind) {
         auto audio_track = static_cast<webrtc::AudioTrackInterface *>(track);

@@ -1,3 +1,4 @@
+#include "SDL2/SDL_hints.h"
 #include "main_window.hh"
 
 #include <array>
@@ -16,20 +17,23 @@ extern "C" {
 #include <SDL2/SDL_ttf.h>
 }
 
-static int text_width(mu_Font font, const char *text, int len)
-{
-    if (len == -1) {
-        len = strlen(text);
-    }
-    return r_get_text_width(text, len);
-}
+#include <absl/flags/flag.h>
+#include <absl/flags/parse.h>
+#include <absl/flags/usage.h>
+#include <fmt/format.h>
 
-static int text_height(mu_Font font) { return r_get_text_height(); }
+ABSL_FLAG(bool, rtclog, false, "enable webrtc debug level logging");
+ABSL_FLAG(bool, debug, false, "enable verbose logging");
 
-static mu_Context *init()
+int main(int argc, char *argv[])
 {
-    rtc::LogMessage::LogToDebug(rtc::LS_INFO);
-    logger::set_level(spdlog::level::debug);
+    absl::SetProgramUsageMessage(fmt::format("sample usage: {}", argv[0]));
+    absl::ParseCommandLine(argc, argv);
+
+    rtc::LogMessage::LogToDebug(absl::GetFlag(FLAGS_rtclog) ? rtc::LS_INFO
+                                                            : rtc::LS_WARNING);
+    logger::set_level(absl::GetFlag(FLAGS_debug) ? spdlog::level::trace
+                                                 : spdlog::level::debug);
     logger::info("Hello dezk");
 
     if (SDL_Init(SDL_INIT_EVERYTHING) || TTF_Init()) {
@@ -37,18 +41,21 @@ static mu_Context *init()
         exit(EXIT_FAILURE);
     }
 
+    SDL_SetHint(SDL_HINT_GRAB_KEYBOARD, "1");
+    SDL_SetHint(SDL_HINT_ALLOW_ALT_TAB_WHILE_GRABBED, "1");
+    SDL_SetHint(SDL_HINT_WINDOWS_NO_CLOSE_ON_ALT_F4, "1");
+
     r_init();
     auto *ctx = new mu_Context;
     mu_init(ctx);
-    ctx->text_width = text_width;
-    ctx->text_height = text_height;
+    ctx->text_width = [](mu_Font font, const char *text, int len) {
+        if (len == -1) {
+            len = strlen(text);
+        }
+        return r_get_text_width(text, len);
+    };
+    ctx->text_height = [](mu_Font font) { return r_get_text_height(); };
 
-    return ctx;
-}
-
-int main(int argc, char *argv[])
-{
-    mu_Context *ctx = init();
     MainWindow wnd(ctx, argc, argv);
     wnd.run();
     return 0;

@@ -138,7 +138,7 @@ void MainWindow::login_window(mu_Context *ctx)
                 submit = 1;
             }
 
-            if (submit || auto_login_) {
+            if (submit || need_login_) {
                 login();
             }
         }
