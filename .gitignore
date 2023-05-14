@@ -8,6 +8,7 @@ build/
 
 .cache
 .vscode
+.clangd
 third_party
 libwebrtc/
 compile_commands.json

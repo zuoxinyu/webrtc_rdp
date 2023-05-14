@@ -33,8 +33,8 @@ class MainWindow
     // handlers
     void process_mu_windows();
     void process_mu_commands();
-    void handle_main_event(const SDL_Event &e);
-    void handle_remote_event(const SDL_Event &e);
+    void handle_main_event(SDL_Event &e);
+    void handle_remote_event(SDL_Event &e);
 
     // actions
     void login();

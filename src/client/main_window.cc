@@ -1,5 +1,6 @@
 #include "main_window.hh"
 #include "event_executor.hh"
+#include "ui/sdl_trigger.hh"
 
 #include <cstdlib>
 #include <cstring>
@@ -173,6 +174,13 @@ void MainWindow::run()
             return tick;
         },
         this);
+    Trigger::on({SDLK_LCTRL, SDLK_LSHIFT, SDLK_LALT, SDLK_q}, [this] {
+        auto window = screen_renderer_->get_window();
+        auto state = SDL_GetWindowGrab(window);
+        SDL_SetWindowGrab(window, state ? SDL_FALSE : SDL_TRUE);
+        logger::debug("escape shortcuts met, {} grab mode",
+                      state ? "leaving" : "entering");
+    });
 
     running_ = true;
     while (running_) {
@@ -228,7 +236,7 @@ void MainWindow::process_mu_windows()
     mu_end(ctx_);
 }
 
-void MainWindow::handle_main_event(const SDL_Event &e)
+void MainWindow::handle_main_event(SDL_Event &e)
 {
     switch (e.type) {
     case SDL_QUIT:
@@ -282,8 +290,9 @@ void MainWindow::handle_main_event(const SDL_Event &e)
     }
 }
 
-void MainWindow::handle_remote_event(const SDL_Event &e)
+void MainWindow::handle_remote_event(SDL_Event &e)
 {
+    Trigger::processEvent(e);
     SDL_Window *window = screen_renderer_->get_window();
     switch (e.type) {
     case SDL_WINDOWEVENT:
@@ -301,13 +310,6 @@ void MainWindow::handle_remote_event(const SDL_Event &e)
         logger::debug("transferring file: {}", file_name);
         SDL_free(file_name);
     } break;
-    case SDL_MOUSEBUTTONDOWN:
-        if (e.button.button == SDL_BUTTON_MIDDLE) {
-
-            SDL_SetWindowGrab(window,
-                              SDL_GetWindowGrab(window) ? SDL_FALSE : SDL_TRUE);
-            break;
-        }
     default: {
         SDL_Event ev = e;
         pc_->post_binary_message(reinterpret_cast<const uint8_t *>(&ev),
