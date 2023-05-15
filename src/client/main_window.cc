@@ -1,22 +1,18 @@
 #include "main_window.hh"
-#include "event_executor.hh"
+#include "executor/event_executor.hh"
 #include "ui/sdl_trigger.hh"
-
-#include <cstdlib>
-#include <cstring>
-#include <thread>
-
-#include <absl/flags/flag.h>
-#include <boost/asio.hpp>
-
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_keyboard.h>
-#include <SDL2/SDL_video.h>
-
 extern "C" {
 #include "ui/microui.h"
 #include "ui/renderer.h"
 }
+
+#include <thread>
+
+#include <SDL2/SDL.h>
+#include <SDL2/SDL_keyboard.h>
+#include <SDL2/SDL_video.h>
+#include <absl/flags/flag.h>
+#include <boost/asio.hpp>
 
 static const VideoRenderer::Config camera_opts = {.name = "camera video",
                                                   .width = 600,
@@ -41,10 +37,15 @@ ABSL_FLAG(std::string, user, "username", "signaling name");
 ABSL_FLAG(std::string, host, "10.10.10.133", "signal server host");
 ABSL_FLAG(int, port, 8888, "signal server port");
 ABSL_FLAG(bool, auto_login, true, "auto login");
-ABSL_FLAG(std::vector<std::string>, servers, {"stun:10.10.10.133"},
-          "stun servers");
 ABSL_FLAG(bool, use_opengl, true, "use OpenGL instead of SDL2");
 ABSL_FLAG(bool, use_h264, false, "use custom H264 codec implementation");
+ABSL_FLAG(std::vector<std::string>, servers,
+          std::vector<std::string>({
+              "stun:stun1.l.google.com:19302",
+              "stun:stun2.l.google.com:19302",
+              "stun:stun3.l.google.com:19302",
+          }),
+          "stun servers");
 
 MainWindow::MainWindow(mu_Context *ctx, int argc, char *argv[]) : ctx_(ctx)
 {

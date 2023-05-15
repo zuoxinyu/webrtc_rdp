@@ -3,13 +3,10 @@ add_rules('mode.debug', 'mode.release')
 set_toolchains('clang')
 set_defaultmode("debug")
 
+local vcpkg_lib = os.getenv('VCPKG_ROOT') .. '/installed/x64-linux/lib'
 local webrtc_dir = '../webrtc'
 local webrtc_branch = 'm113 refs/remotes/branch-heads/5672'
 local webrtc_src_dir = path.join(webrtc_dir, 'src')
-local webrtc_third_party_dirs = {
-    -- path.join(webrtc_src_dir, 'third_party', 'abseil-cpp'),
-    -- path.join(webrtc_src_dir, 'third_party', 'libyuv'),
-}
 local webrtc_out_dir = 'out/linux-debug'
 if is_os('linux') then
     if is_mode('release') then
@@ -20,8 +17,10 @@ if is_os('linux') then
 elseif is_os('windows') then
     if is_mode('release') then
         webrtc_out_dir = 'out/windows-release'
+        set_runtimes("MT")
     elseif is_mode('debug') then
         webrtc_out_dir = 'out/windows-debug'
+        set_runtimes("MTd")
     end
 end
 local webrtc_obj_dir = path.join(webrtc_src_dir, webrtc_out_dir, 'obj')
@@ -63,9 +62,57 @@ local gn_cmd = string.format([[gn gen %s --args="%s"]], webrtc_out_dir, table.co
 local ninja_cmd = string.format([[ninja -C %s]], webrtc_out_dir)
 local mt_cmd = [[mt.exe -manifest .\dezk.manifest -outputresource:'.\build\windows\x64\debug\dezk.exe;#1']]
 
+add_requireconfs("*", { configs = { shared = false, system = true, debug = true }, shared = false })
+
+local function require_vcpkg(pkg, opts)
+    local o = { alias = pkg }
+    for k, v in pairs(opts) do
+        o[k] = v
+    end
+    add_requires('vcpkg::' .. pkg, o)
+end
+
+require_vcpkg('boost-asio')
+require_vcpkg('boost-beast')
+require_vcpkg('boost-json')
+require_vcpkg('boost-url')
+require_vcpkg('fmt')
+require_vcpkg('spdlog')
+require_vcpkg('abseil')
+require_vcpkg('nlohmann-json')
+require_vcpkg('libyuv')
+-- glew
+require_vcpkg('glew')
+-- add_vcpkg('opengl')
+-- end glew
+require_vcpkg('sdl2')
+-- sdl2-ttf
+require_vcpkg('sdl2-ttf')
+require_vcpkg('freetype')
+require_vcpkg('bzip2')
+require_vcpkg('brotli')
+require_vcpkg('zlib')
+require_vcpkg('libpng')
+-- end sdl2-ttf
+-- ffmpeg
+require_vcpkg('ffmpeg[avcodec]', { alias = 'avcodec' })
+require_vcpkg('ffmpeg[avutil]', { alias = 'avutil' })
+require_vcpkg('ffmpeg[avformat]', { alias = 'avformat' })
+require_vcpkg('liblzma')
+-- end ffmpeg
+
+if is_os('linux') then
+    add_requires('system::xdo', { alias = 'xdo' })
+end
+
+if is_os('windows') then
+    require_vcpkg('x264')
+end
+
 local function windows_options()
     -- clang windows workarounds
     add_cxxflags('-fms-runtime-lib=static_dbg', '-fms-extensions')
+    add_defines('WEBRTC_WIN', 'NOMINMAX', '_WIN32_WINNT=0x0601', '_CRT_SECURE_NO_WARNINGS')
     add_defines(
         'SDL_MAIN_HANDLED',
         'BOOST_ASIO_HAS_STD_COROUTINE',
@@ -79,49 +126,24 @@ local function windows_options()
 end
 
 local function linux_options()
+    add_defines('WEBRTC_POSIX', 'WEBRTC_LINUX', 'WEBRTC_USE_X11')
     add_links('glib-2.0', 'gobject-2.0', 'gio-2.0', 'gbm')
     add_links('X11', 'Xext', 'Xfixes', 'Xdamage', 'Xrandr', 'Xcomposite', 'Xtst')
     add_links('rt', 'drm')
 end
 
-if is_os('linux') then
-    add_requires('xdo', { system = true })
+local function add_vcpkg(...)
+    local args = { ... }
+    for _, v in ipairs(args) do
+        add_packages(v)
+    end
 end
-
-add_requires('boost-asio', { system = true, debug = true })
-add_requires('boost-beast', { system = true, debug = true })
-add_requires('boost-json', { system = true, debug = true })
-add_requires('boost-url', { system = true, debug = true })
-add_requires('abseil', { system = true })
--- glew
-add_requires('glew', { system = true })
-add_requires('opengl', { system = true })
--- end glew
-add_requires('sdl2', { system = true })
--- sdl2-ttf
-add_requires('sdl2-ttf', { system = true })
-add_requires('freetype', { system = true })
-add_requires('bzip2', { system = true })
-add_requires('brotli', { system = true })
-add_requires('zlib', { system = true })
-add_requires('libpng', { system = true })
--- end sdl2-ttf
-add_requires('spdlog', { system = true, })
-add_requires('fmt', { system = true, debug = true })
-add_requires('nlohmann-json', { system = true })
-add_requires('libyuv', { system = true })
--- ffmpeg
-add_requires('ffmpeg[avcodec]', { alias = 'avcodec', system = true })
-add_requires('ffmpeg[avutil]', { alias = 'avutil', system = true })
-add_requires('ffmpeg[avformat]', { alias = 'avformat', system = true })
-add_requires('x264', { system = true })
-add_requires('liblzma', { system = true })
--- end ffmpeg
 
 target('dezk', function()
     set_default(true)
     set_kind('binary')
     set_languages('c17', 'cxx20')
+    add_cxxflags('-Wno-deprecated-declarations')
 
     add_includedirs('src', webrtc_src_dir)
     add_files('src/client/**.cc', 'src/client/**.c')
@@ -130,20 +152,18 @@ target('dezk', function()
     add_linkdirs(webrtc_obj_dir)
     add_links('webrtc')
 
-    add_cxxflags('-Wno-deprecated-declarations')
-
     if is_os('linux') then
-        add_defines('WEBRTC_POSIX', 'WEBRTC_LINUX', 'WEBRTC_USE_X11')
-        add_packages('xdo')
         linux_options()
-    elseif is_os('windows') then
-        add_defines('WEBRTC_WIN', 'NOMINMAX', '_WIN32_WINNT=0x0601', '_CRT_SECURE_NO_WARNINGS', 'SDL_MAIN_HANDLED')
-        windows_options()
+        add_packages('xdo')
     end
-    add_packages('boost-json', 'boost-url', 'spdlog', 'abseil', 'nlohmann-json')
-    add_packages('sdl2', 'sdl2-ttf', 'glew')
-    add_packages('avcodec', 'avutil', 'avformat', 'libyuv')
-    add_packages('opengl', 'freetype', 'zlib', 'liblzma', 'brotli', 'libpng', 'bzip2', 'x264')
+    if is_os('windows') then
+        windows_options()
+        add_packages('x264')
+    end
+    add_vcpkg('boost-json', 'boost-url', 'spdlog', 'abseil', 'nlohmann-json')
+    add_vcpkg('sdl2', 'sdl2-ttf', 'glew')
+    add_vcpkg('avcodec', 'avutil', 'avformat', 'libyuv')
+    add_vcpkg('freetype', 'zlib', 'liblzma', 'brotli', 'libpng', 'bzip2')
 
     if is_os('linux') then
         after_build(function(target)
@@ -163,6 +183,11 @@ target('signal_server', function()
         windows_options()
         add_defines('NOMINMAX', '_WIN32_WINNT=0x0601', '_CRT_SECURE_NO_WARNINGS')
     end
+    if is_os('linux') then
+        add_cxxflags('-static-libstdc++', '-static-libgcc')
+        -- add_ldflags('-Wl,--rpath=./lib')
+        -- add_ldflags('-Wl,--dynamic-linker=./lib/ld-linux.so.2')
+    end
     add_packages('boost-asio', 'boost-json', 'boost-url', 'boost-beast')
 
     if is_os('linux') then
@@ -177,10 +202,12 @@ target('video_player_test', function()
     set_languages('c17', 'cxx20')
     add_files('src/client/sink/*.cc')
     add_includedirs('src', webrtc_src_dir)
-    add_includedirs(webrtc_third_party_dirs)
-    add_packages('spdlog', 'fmt', 'sdl2', 'sdl2-ttf', 'glew', 'opengl')
+    add_packages('spdlog', 'fmt', 'sdl2', 'sdl2-ttf', 'glew')
     add_linkdirs(webrtc_obj_dir)
     add_links('webrtc')
+    if is_os('linux') then
+        linux_options()
+    end
     if is_os('windows') then
         windows_options()
     end

@@ -489,7 +489,7 @@ void PeerClient::OnIceCandidate(const webrtc::IceCandidateInterface *candidate)
     std::string candi;
     candidate->ToString(&candi);
 
-    // logger::debug("got local candidate:\n{}", candi);
+    logger::debug("got local candidate:\n{}", candi);
 
     signaling_observer_->SendSignal(MessageType::kCandidate, candi);
 }

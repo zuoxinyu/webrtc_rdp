@@ -1,7 +1,7 @@
 #pragma once
 
 #include "client/stats/stats.hh"
-#include "event_executor.hh"
+#include "executor/event_executor.hh"
 #include "peer_client.hh"
 #include "signal_client.hh"
 #include "sink/video_renderer.hh"

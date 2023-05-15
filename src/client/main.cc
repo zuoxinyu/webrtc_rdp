@@ -1,26 +1,18 @@
-#include "SDL2/SDL_hints.h"
 #include "main_window.hh"
-
-#include <array>
-#include <cstdio>
-#include <cstdlib>
-#include <iostream>
-#include <memory>
-#include <string>
-
-#include "rtc_base/logging.h"
-
 extern "C" {
 #include "ui/microui.h"
 #include "ui/renderer.h"
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_ttf.h>
 }
 
+#include <SDL2/SDL.h>
+#include <SDL2/SDL_hints.h>
+#include <SDL2/SDL_ttf.h>
 #include <absl/flags/flag.h>
 #include <absl/flags/parse.h>
 #include <absl/flags/usage.h>
 #include <fmt/format.h>
+
+#include "rtc_base/logging.h"
 
 ABSL_FLAG(bool, rtclog, false, "enable webrtc debug level logging");
 ABSL_FLAG(bool, debug, false, "enable verbose logging");
