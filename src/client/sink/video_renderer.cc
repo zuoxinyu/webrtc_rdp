@@ -47,6 +47,7 @@ void VideoRenderer::Stop()
     SDL_HideWindow(window_);
 }
 
+/*
 webrtc::WindowId VideoRenderer::get_native_window_handle() const
 {
     auto sdlid = SDL_GetWindowID(window_);
@@ -59,6 +60,7 @@ webrtc::WindowId VideoRenderer::get_native_window_handle() const
     return reinterpret_cast<intptr_t>(info.info.win.window);
 #endif
 }
+*/
 
 // running on capture thread (local) or worker thread (remote)?
 void VideoRenderer::OnFrame(const webrtc::VideoFrame &frame)

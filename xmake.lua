@@ -74,7 +74,6 @@ end
 
 require_vcpkg('boost-asio')
 require_vcpkg('boost-beast')
-require_vcpkg('boost-json')
 require_vcpkg('boost-url')
 require_vcpkg('fmt')
 require_vcpkg('spdlog')
@@ -83,7 +82,6 @@ require_vcpkg('nlohmann-json')
 require_vcpkg('libyuv')
 -- glew
 require_vcpkg('glew')
--- add_vcpkg('opengl')
 -- end glew
 require_vcpkg('sdl2')
 -- sdl2-ttf
@@ -106,6 +104,7 @@ if is_os('linux') then
 end
 
 if is_os('windows') then
+    require_vcpkg('opengl')
     require_vcpkg('x264')
 end
 
@@ -117,7 +116,6 @@ local function windows_options()
         'SDL_MAIN_HANDLED',
         'BOOST_ASIO_HAS_STD_COROUTINE',
         'BOOST_ASIO_HAS_CO_AWAIT',
-        'BOOST_JSON_NO_LIB',
         'BOOST_URL_NO_LIB',
         'FMT_HEADER_ONLY')
     add_syslinks('kernel32', 'user32', 'gdi32', 'winspool', 'comdlg32', 'advapi32', 'shell32',
@@ -158,9 +156,9 @@ target('dezk', function()
     end
     if is_os('windows') then
         windows_options()
-        add_packages('x264')
+        add_vcpkg('x264', 'opengl')
     end
-    add_vcpkg('boost-json', 'boost-url', 'spdlog', 'abseil', 'nlohmann-json')
+    add_vcpkg('boost-url', 'boost-asio', 'boost-beast', 'spdlog', 'abseil', 'nlohmann-json')
     add_vcpkg('sdl2', 'sdl2-ttf', 'glew')
     add_vcpkg('avcodec', 'avutil', 'avformat', 'libyuv')
     add_vcpkg('freetype', 'zlib', 'liblzma', 'brotli', 'libpng', 'bzip2')
@@ -181,14 +179,13 @@ target('signal_server', function()
     add_packages('spdlog', 'fmt')
     if is_os('windows') then
         windows_options()
-        add_defines('NOMINMAX', '_WIN32_WINNT=0x0601', '_CRT_SECURE_NO_WARNINGS')
     end
     if is_os('linux') then
         add_cxxflags('-static-libstdc++', '-static-libgcc')
         -- add_ldflags('-Wl,--rpath=./lib')
         -- add_ldflags('-Wl,--dynamic-linker=./lib/ld-linux.so.2')
     end
-    add_packages('boost-asio', 'boost-json', 'boost-url', 'boost-beast')
+    add_packages('boost-asio', 'boost-url', 'boost-beast', 'nlohmann-json')
 
     if is_os('linux') then
         after_build(function(target)
@@ -207,6 +204,21 @@ target('video_player_test', function()
     add_links('webrtc')
     if is_os('linux') then
         linux_options()
+    end
+    if is_os('windows') then
+        windows_options()
+        add_packages('opengl')
+    end
+end)
+
+target('executor_test', function()
+    set_kind('binary')
+    set_languages('c17', 'cxx20')
+    add_includedirs('src')
+    add_files('src/client/executor/*.cc')
+    add_vcpkg('sdl2', 'spdlog')
+    if is_os('linux') then
+        add_packages('xdo')
     end
     if is_os('windows') then
         windows_options()

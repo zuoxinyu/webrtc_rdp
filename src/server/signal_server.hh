@@ -8,13 +8,14 @@
 #include <boost/asio.hpp>
 #include <boost/beast.hpp>
 
-namespace http = boost::beast::http;
-namespace websocket = boost::beast::websocket;
 namespace asio = boost::asio;
+namespace beast = boost::beast;
+namespace http = beast::http;
+namespace websocket = beast::websocket;
 
 using wstream = websocket::stream<beast::tcp_stream>;
-using response = beast::http::response<beast::http::string_body>;
-using request = beast::http::request<beast::http::string_body>;
+using response = http::response<beast::http::string_body>;
+using request = http::request<beast::http::string_body>;
 using asio::detached;
 using asio::use_awaitable;
 
@@ -63,7 +64,7 @@ struct SignalServer {
     auto handle_send_to(request &&) -> response;
     auto handle_wait(request &&) -> response;
 
-    auto peers_json() const -> json::array;
+    auto peers_json() const -> json;
 
   private:
     asio::io_context &ctx_;

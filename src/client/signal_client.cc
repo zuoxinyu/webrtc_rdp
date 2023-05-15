@@ -10,7 +10,9 @@
 #include <thread>
 #include <utility>
 
-#include <boost/json.hpp>
+#include <boost/beast.hpp>
+
+namespace http = beast::http;
 
 using asio::ip::make_address_v4;
 
@@ -107,16 +109,15 @@ awaitable<void> SignalClient::wait_message()
             co_await http::async_read(stream_, fb, resp, use_awaitable);
 
             /* logger::debug("wait response:\n{}", to_str(resp)); */
-            json::object body = json::parse(resp.body()).as_object();
+            json body = json::parse(resp.body());
 
             set_peers(body["peers"]);
 
             if (body["msg"].is_object()) {
-                json::object msg = body["msg"].as_object();
-                std::string peer_id = std::string(msg["from"].as_string());
-                MessageType mt =
-                    MessageTypeFromString(std::string(msg["type"].as_string()));
-                std::string payload(msg["payload"].get_string());
+                json msg = body["msg"];
+                auto peer_id = std::string(msg["from"]);
+                auto payload = std::string(msg["payload"]);
+                auto mt = MessageTypeFromString(msg["type"]);
 
                 if (mt == MessageType::kOffer) {
                     current_peer_ = std::move(peer_id);
@@ -166,17 +167,15 @@ awaitable<void> SignalClient::send_message(Peer::Id peer_id,
     req.set(http::field::content_type, "text/json");
     req.set(http::field::pragma, me_.id);
 
-    // clang-formag off
-    json::object msg = {{"to", peer_id},
-                        {"msg",
-                         {
-                             {"from", me_.id},
-                             {"type", MessageTypeToString(mt)},
-                             {"payload", payload},
-                         }}};
-    // clang-formag on
+    json msg = {{"to", peer_id},
+                {"msg",
+                 {
+                     {"from", me_.id},
+                     {"type", MessageTypeToString(mt)},
+                     {"payload", payload},
+                 }}};
 
-    req.body() = json::serialize(msg);
+    req.body() = msg.dump();
     req.prepare_payload();
 
     logger::trace("send request:\n{}", to_str(req));
@@ -202,9 +201,9 @@ awaitable<void> SignalClient::handle_pending_messages()
     }
 };
 
-void SignalClient::set_peers(const json::value &v)
+void SignalClient::set_peers(const json &v)
 {
-    json::array peers = v.as_array();
+    json peers = v;
     peers_.clear();
 
     std::for_each(peers.begin(), peers.end(), [this](const Peer &v) {

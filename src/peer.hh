@@ -2,13 +2,11 @@
 
 #include <map>
 #include <string>
-
-#include <boost/json.hpp>
-#include <boost/json/serialize.hpp>
-using namespace boost;
-
-#include <string>
 #include <utility>
+
+#include <nlohmann/json.hpp>
+using json = nlohmann::ordered_json;
+
 struct Peer {
     std::string name;
     std::string id;
@@ -24,32 +22,40 @@ struct Peer {
     {
     }
 
-    Peer(const json::value &json)
+    Peer(const json &v)
     {
-        name = json.at("name").get_string();
-        id = json.at("id").get_string();
-        online = json.at("online").get_bool();
+        name = v["name"];
+        id = v["id"];
+        online = v["online"];
     }
 
     ~Peer() = default;
 
-    Peer &operator=(json::value &&v)
+    Peer &operator=(json &&v)
     {
         Peer x = Peer(v);
         std::swap(*this, x);
         return *this;
     }
 
-    operator json::value() const
+    operator json() const
     {
-        return json::object{
+        return {
             {"name", name},
             {"id", id},
             {"online", online},
         };
     }
 
-    operator std::string() { return json::serialize(*this); }
+    operator std::string()
+    {
+        json v = {
+            {"name", name},
+            {"id", id},
+            {"online", online},
+        };
+        return v.dump();
+    }
 
     bool operator==(const Peer &other) const { return name == other.name; }
 

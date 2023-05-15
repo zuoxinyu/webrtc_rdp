@@ -127,9 +127,6 @@ static KeySym SDLScancodeToX11Keysym(SDL_Scancode scancode)
     if (scancode >= SDL_SCANCODE_A && scancode <= SDL_SCANCODE_Z) {
         return XK_a + (scancode - SDL_SCANCODE_A);
     }
-    if (scancode >= SDL_SCANCODE_A && scancode <= SDL_SCANCODE_Z) {
-        return XK_a + (scancode - SDL_SCANCODE_A);
-    }
     if (scancode == SDL_SCANCODE_0) {
         return XK_0;
     }
@@ -147,7 +144,8 @@ static KeySym SDLScancodeToX11Keysym(SDL_Scancode scancode)
 
 static constexpr int kDelayMicros = 12000;
 
-X11EventExecutor::X11EventExecutor(SDL_Window *win) : EventExecutor(win)
+X11EventExecutor::X11EventExecutor(int w, int h, int rw, int rh)
+    : EventExecutor(w, h, rw, rh)
 {
     xdo_ = xdo_new(nullptr);
 }

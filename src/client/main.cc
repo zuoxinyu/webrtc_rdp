@@ -1,3 +1,4 @@
+#include "SDL2/SDL_video.h"
 #include "main_window.hh"
 extern "C" {
 #include "ui/microui.h"

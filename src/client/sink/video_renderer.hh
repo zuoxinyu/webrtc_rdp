@@ -29,7 +29,7 @@ struct VideoRenderer : public VideoSink {
     static rtc::scoped_refptr<VideoRenderer> Create(Config conf);
     ~VideoRenderer() override;
     SDL_Window *get_window() const { return window_; }
-    webrtc::WindowId get_native_window_handle() const;
+    /* webrtc::WindowId get_native_window_handle() const; */
     void update_frame();
 
     // impl VideoSinkInterface

@@ -10,36 +10,43 @@
 #pragma comment(lib, "user32.lib")
 int main(int argc, char **argv)
 {
-    if (argc < 2) {
-        std::cout << "usage: input_test <event> x y" << std::endl;
+    if (argc < 3) {
+        std::cout << "usage:\n\t" << argv[0] << " <event> x y" << std::endl;
         return 0;
     }
 
     RECT desktop_rect;
     GetClientRect(GetDesktopWindow(), &desktop_rect);
 
+    int x = 0, y = 0;
+    char key;
     std::string action = argv[1];
-    int x = std::atoi(argv[2]);
-    int y = std::atoi(argv[3]);
+    if (action == "move") {
+        x = std::atoi(argv[2]);
+        y = std::atoi(argv[3]);
+    } else if (action == "keydown") {
+        key = argv[2][0];
+    }
 
     INPUT input = {0};
-    input.type = INPUT_MOUSE;
-    input.mi = {
-        .dx = x * 65536 / desktop_rect.right,
-        .dy = y * 65536 / desktop_rect.bottom,
-        .mouseData = 0,
-        .dwFlags =
-            MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_MOVE | MOUSEEVENTF_VIRTUALDESK,
-        .time = 0,
-        .dwExtraInfo = 100,
-    };
     if (action == "move") {
+        input.type = INPUT_MOUSE;
         input.mi.dwFlags =
             MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_MOVE | MOUSEEVENTF_VIRTUALDESK;
     } else if (action == "ldown") {
+        input.type = INPUT_MOUSE;
         input.mi.dwFlags = MOUSEEVENTF_LEFTDOWN;
     } else if (action == "rdown") {
+        input.type = INPUT_MOUSE;
         input.mi.dwFlags = MOUSEEVENTF_RIGHTDOWN;
+    } else if (action == "keydown") {
+        input.type = INPUT_KEYBOARD;
+        input.ki.wVk = key;
+        input.ki.dwFlags = KEYEVENTF_EXTENDEDKEY;
+    } else if (action == "keyup") {
+        input.type = INPUT_KEYBOARD;
+        input.ki.wVk = key;
+        input.ki.dwFlags = KEYEVENTF_KEYUP | KEYEVENTF_EXTENDEDKEY;
     }
 
     UINT ret = SendInput(1, &input, sizeof(INPUT));

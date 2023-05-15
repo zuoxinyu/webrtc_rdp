@@ -67,7 +67,8 @@ MainWindow::MainWindow(mu_Context *ctx, int argc, char *argv[]) : ctx_(ctx)
     screen_renderer_ = VideoRenderer::Create(desktop_opts);
     screen_video_src_ = ScreenCapturer::Create(capture_opts);
 
-    executor_ = EventExecutor::create(screen_renderer_->get_window());
+    executor_ =
+        EventExecutor::create(desktop_opts.width, desktop_opts.height, 0, 0);
     stats_observer_ = StatsObserver::Create(stats_json_);
 
     cc_->set_peer_observer(pc_.get()); // recursive reference?
@@ -183,6 +184,8 @@ void MainWindow::run()
                       state ? "leaving" : "entering");
     });
 
+    // force no generation for SDL_TEXTINPUT event
+    SDL_StopTextInput();
     running_ = true;
     while (running_) {
         while (ioctx_.poll()) {
@@ -294,7 +297,6 @@ void MainWindow::handle_main_event(SDL_Event &e)
 void MainWindow::handle_remote_event(SDL_Event &e)
 {
     Trigger::processEvent(e);
-    SDL_Window *window = screen_renderer_->get_window();
     switch (e.type) {
     case SDL_WINDOWEVENT:
         if (e.window.event == SDL_WINDOWEVENT_CLOSE) {

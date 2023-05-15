@@ -13,12 +13,10 @@
 #include <boost/asio/use_awaitable.hpp>
 #include <boost/beast/core/buffers_to_string.hpp>
 #include <boost/beast/core/flat_buffer.hpp>
-#include <boost/json/src.hpp>
-#include <boost/json.hpp>
-#include <boost/json/serializer.hpp>
 #include <boost/url.hpp>
 #include <boost/url/parse.hpp>
 
+namespace urls = boost::urls;
 using namespace std::chrono_literals;
 
 template <bool B, typename T, typename P>
@@ -119,7 +117,7 @@ auto SignalServer::handle_http_session(
             id = req[http::field::pragma];
 
             if (websocket::is_upgrade(req)) {
-                auto ws = make_unique<wstream>(stream->release_socket());
+                auto ws = std::make_unique<wstream>(stream->release_socket());
                 co_await asio::co_spawn(
                     ctx_,
                     handle_websocket_session(std::move(ws), std::move(req)),
@@ -224,7 +222,7 @@ auto SignalServer::handle_sign_in(request &&req) -> response
     resp.set(http::field::pragma, peer.id);
     resp.set(http::field::content_type, "text/json");
     resp.keep_alive(req.keep_alive());
-    resp.body() = json::serialize(peers_json());
+    resp.body() = peers_json().dump();
     resp.prepare_payload();
 
     return resp;
@@ -247,20 +245,21 @@ auto SignalServer::handle_wait(request &&req) -> response
 {
     std::string id = req[http::field::pragma];
     auto &msgq = peers_[id].msg_queue;
-    json::object msg_body;
+    json msg_body;
     if (!msgq.empty()) {
         std::string pending_msg = peers_[id].msg_queue.front();
         peers_[id].msg_queue.pop();
-        msg_body = {{"peers", peers_json()}, {"msg", json::parse(pending_msg)}};
+        msg_body["peers"] = peers_json();
+        msg_body["msg"] = json::parse(pending_msg);
     } else {
-        msg_body = {{"peers", peers_json()}};
+        msg_body["peers"] = peers_json();
     }
 
     auto resp = response{http::status::ok, req.version()};
     resp.set(http::field::pragma, id);
     resp.set(http::field::content_type, "text/json");
     resp.keep_alive(true);
-    resp.body() = json::serialize(msg_body);
+    resp.body() = msg_body.dump();
     resp.prepare_payload();
 
     return resp;
@@ -268,12 +267,11 @@ auto SignalServer::handle_wait(request &&req) -> response
 
 auto SignalServer::handle_send_to(request &&req) -> response
 {
-    json::value body = json::parse(req.body());
-    json::object obj = body.get_object();
-    json::string to = obj["to"].get_string();
-    json::object msg = obj["msg"].get_object();
+    json body = json::parse(req.body());
+    std::string to = body["to"];
+    json msg = body["msg"];
 
-    peers_[std::string(to)].msg_queue.push(json::serialize(msg));
+    peers_[to].msg_queue.push(msg.dump());
 
     auto resp = response{http::status::ok, req.version()};
     resp.set(http::field::pragma, req[http::field::pragma]);
@@ -285,11 +283,11 @@ auto SignalServer::handle_send_to(request &&req) -> response
     return resp;
 }
 
-auto SignalServer::peers_json() const -> json::array
+auto SignalServer::peers_json() const -> json
 {
-    json::array peers_json;
+    json peers;
     for (auto &it : peers_) {
-        peers_json.push_back(json::value(it.second.peer));
+        peers.push_back(it.second.peer);
     }
-    return peers_json;
+    return json(peers);
 }

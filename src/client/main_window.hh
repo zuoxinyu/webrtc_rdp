@@ -12,6 +12,8 @@
 #include <string>
 #include <thread>
 
+#include <boost/asio.hpp>
+
 using mu_Context = struct mu_Context;
 
 class MainWindow

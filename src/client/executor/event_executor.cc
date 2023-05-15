@@ -1,22 +1,20 @@
 #include "event_executor.hh"
 
 // TODO: need local/remote resolutions
-auto EventExecutor::create(EventExecutor::WindowHandle handle)
+auto EventExecutor::create(int w, int h, int rw, int rh)
     -> std::unique_ptr<EventExecutor>
 {
 #ifdef _WIN32
-    return std::make_unique<Win32EventExecutor>(
-        reinterpret_cast<SDL_Window *>(handle));
+    return std::make_unique<Win32EventExecutor>(w, h, rw, rh);
 #elif __linux__
-    return std::make_unique<X11EventExecutor>(
-        reinterpret_cast<SDL_Window *>(handle));
+    return std::make_unique<X11EventExecutor>(w, h, rw, rh);
 #else
     // not implemented
     return nullptr;
 #endif
 }
 
-EventExecutor::EventExecutor(SDL_Window *win) : win_(win)
+EventExecutor::EventExecutor(int w, int h, int rw, int rh)
+    : window_width_(w), window_height_(h), remote_width_(rw), remote_height_(rh)
 {
-    SDL_GetWindowSize(win_, &width_, &height_);
 }

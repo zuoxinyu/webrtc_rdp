@@ -12,10 +12,10 @@
 
 #include <boost/asio.hpp>
 #include <boost/beast.hpp>
+#include <nlohmann/json.hpp>
 
 namespace beast = boost::beast;
-namespace json = boost::json;
-namespace http = beast::http;
+namespace asio = boost::asio;
 
 using asio::awaitable;
 using asio::detached;
@@ -37,7 +37,8 @@ struct SignalClient : public SignalingObserver {
         std::string host = "127.0.0.1";
         int port = 8888;
         bool use_websocket = false;
-        std::chrono::duration<long> stream_expire_time = std::chrono::seconds(30);
+        std::chrono::duration<long> stream_expire_time =
+            std::chrono::seconds(30);
         std::chrono::duration<long> http_wait_time = std::chrono::seconds(1);
     };
 
@@ -77,7 +78,7 @@ struct SignalClient : public SignalingObserver {
     awaitable<void> handle_pending_messages();
 
   private:
-    void set_peers(const json::value &v);
+    void set_peers(const json &v);
     void do_logout();
 
   private:
