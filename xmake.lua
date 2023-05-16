@@ -1,28 +1,13 @@
 set_project('webrtc-rdp')
+
 add_rules('mode.debug', 'mode.release')
 set_toolchains('clang')
 set_defaultmode("debug")
 
-local vcpkg_lib = os.getenv('VCPKG_ROOT') .. '/installed/x64-linux/lib'
 local webrtc_dir = '../webrtc'
 local webrtc_branch = 'm113 refs/remotes/branch-heads/5672'
 local webrtc_src_dir = path.join(webrtc_dir, 'src')
-local webrtc_out_dir = 'out/linux-debug'
-if is_os('linux') then
-    if is_mode('release') then
-        webrtc_out_dir = 'out/linux-release'
-    elseif is_mode('debug') then
-        webrtc_out_dir = 'out/linux-debug'
-    end
-elseif is_os('windows') then
-    if is_mode('release') then
-        webrtc_out_dir = 'out/windows-release'
-        set_runtimes("MT")
-    elseif is_mode('debug') then
-        webrtc_out_dir = 'out/windows-debug'
-        set_runtimes("MTd")
-    end
-end
+local webrtc_out_dir = path.join('out', os.host() .. '-debug')
 local webrtc_obj_dir = path.join(webrtc_src_dir, webrtc_out_dir, 'obj')
 
 local gn_args = {
@@ -194,36 +179,40 @@ target('signal_server', function()
     end
 end)
 
-target('video_player_test', function()
-    set_kind('binary')
-    set_languages('c17', 'cxx20')
-    add_files('src/client/sink/*.cc')
-    add_includedirs('src', webrtc_src_dir)
-    add_packages('spdlog', 'fmt', 'sdl2', 'sdl2-ttf', 'glew')
-    add_linkdirs(webrtc_obj_dir)
-    add_links('webrtc')
-    if is_os('linux') then
-        linux_options()
-    end
-    if is_os('windows') then
-        windows_options()
-        add_packages('opengl')
-    end
-end)
+if get_config('buildtest') == 1 then
+    target('video_player_test', function()
+        set_kind('binary')
+        set_languages('c17', 'cxx20')
+        add_files('src/client/sink/*.cc')
+        add_includedirs('src', webrtc_src_dir)
+        add_packages('spdlog', 'fmt', 'sdl2', 'sdl2-ttf', 'glew')
+        add_linkdirs(webrtc_obj_dir)
+        add_links('webrtc')
+        if is_os('linux') then
+            linux_options()
+        end
+        if is_os('windows') then
+            windows_options()
+            add_packages('opengl')
+        end
+    end)
 
-target('executor_test', function()
-    set_kind('binary')
-    set_languages('c17', 'cxx20')
-    add_includedirs('src')
-    add_files('src/client/executor/*.cc')
-    add_vcpkg('sdl2', 'spdlog')
-    if is_os('linux') then
-        add_packages('xdo')
-    end
     if is_os('windows') then
-        windows_options()
+        target('executor_test', function()
+            set_kind('binary')
+            set_languages('c17', 'cxx20')
+            add_includedirs('src')
+            add_files('src/client/executor/*.cc')
+            add_vcpkg('sdl2', 'spdlog')
+            if is_os('linux') then
+                add_packages('xdo')
+            end
+            if is_os('windows') then
+                windows_options()
+            end
+        end)
     end
-end)
+end
 
 task('fetch-webrtc', function()
     on_run(function()

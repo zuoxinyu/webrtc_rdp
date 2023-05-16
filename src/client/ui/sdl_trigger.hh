@@ -25,6 +25,7 @@ struct KeyCombination {
     bool isFulfilled() const;
 };
 
+// TODO: add ID and add return type to processEvent
 struct Trigger {
     KeyCombination combination;
     Callback callback;

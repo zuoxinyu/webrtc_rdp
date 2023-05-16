@@ -7,6 +7,9 @@
 class EventExecutor
 {
   public:
+#ifdef __linux__
+    using xdo_t = struct xdo;
+#endif
     struct Event {
         SDL_Event native_ev;
     };
@@ -19,41 +22,21 @@ class EventExecutor
 
   public:
     EventExecutor(int w, int h, int rw, int rh);
-    virtual ~EventExecutor() = default;
-    virtual auto execute(Event) -> bool = 0;
+    ~EventExecutor() = default;
+    auto execute(Event) -> bool;
+    // auto mouse_move();
+    // auto mouse_click();
+    // auto key_down();
+    // auto key_up();
 
   protected:
     int window_width_ = 0;
     int window_height_ = 0;
-    int remote_width_ = 2560;
-    int remote_height_ = 1600;
-};
-
-#ifdef _WIN32
-class Win32EventExecutor : public EventExecutor
-{
-  public:
-    Win32EventExecutor(int w, int h, int rw, int rh);
-    ~Win32EventExecutor() override = default;
-
-    auto execute(EventExecutor::Event ev) -> bool override;
-};
-#endif
-
-#ifdef __linux__
-using xdo_t = struct xdo;
-class X11EventExecutor : public EventExecutor
-{
-  public:
-    X11EventExecutor(int w, int h, int rw, int rh);
-    ~X11EventExecutor() override;
-
-    auto execute(EventExecutor::Event ev) -> bool override;
+    int remote_width_ = 0;
+    int remote_height_ = 0;
 
   private:
-    auto translate() -> Pos;
-    auto translateKeyseq(const SDL_Event &e, char key_seq[32]) -> void;
-
+#ifdef __linux__
     xdo_t *xdo_;
-};
 #endif
+};

@@ -218,13 +218,8 @@ auto translate(const SDL_KeyboardEvent &e) -> INPUT
     return input;
 }
 
-Win32EventExecutor::Win32EventExecutor(int w, int h, int rw, int rh)
-    : EventExecutor(w, h, rw, rh)
-{
-}
-
 // TODO: bypass UIPI?
-auto Win32EventExecutor::execute(EventExecutor::Event ev) -> bool
+auto EventExecutor::execute(EventExecutor::Event ev) -> bool
 {
     SDL_Event e = ev.native_ev;
     INPUT input;

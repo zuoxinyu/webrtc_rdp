@@ -14,24 +14,24 @@ extern "C" {
 #include <absl/flags/flag.h>
 #include <boost/asio.hpp>
 
-static const VideoRenderer::Config camera_opts = {.name = "camera video",
+static const VideoRenderer::Config camwin_opts = {.name = "camera video",
                                                   .width = 600,
                                                   .height = 400,
                                                   .use_opengl = false,
                                                   .dump = false,
                                                   .hide = true};
-static const VideoRenderer::Config desktop_opts = {.name = "remote desktop",
-                                                   .width = 1920,
-                                                   .height = 1200,
-                                                   .use_opengl = true,
-                                                   .dump = false,
-                                                   .hide = true};
+static const VideoRenderer::Config capwin_opts = {.name = "remote desktop",
+                                                  .width = 1920,
+                                                  .height = 1200,
+                                                  .use_opengl = true,
+                                                  .dump = false,
+                                                  .hide = true};
 static const ScreenCapturer::Config capture_opts = {.fps = 60,
                                                     .width = 2560,
                                                     .height = 1600,
                                                     .keep_ratio = true,
                                                     .exlude_window_id = {}};
-static const CameraCapturer::Config cameracap_opts = {
+static const CameraCapturer::Config camera_opts = {
     .width = 600, .height = 400, .fps = 30, .uniq = ""};
 ABSL_FLAG(std::string, user, "username", "signaling name");
 ABSL_FLAG(std::string, host, "10.10.10.133", "signal server host");
@@ -64,11 +64,11 @@ MainWindow::MainWindow(mu_Context *ctx, int argc, char *argv[]) : ctx_(ctx)
     // TODO: delay heavy works
     pc_ = std::make_unique<PeerClient>(pc_conf_);
     cc_ = std::make_unique<SignalClient>(ioctx_, cc_conf_);
-    screen_renderer_ = VideoRenderer::Create(desktop_opts);
+    screen_renderer_ = VideoRenderer::Create(capwin_opts);
     screen_video_src_ = ScreenCapturer::Create(capture_opts);
 
-    executor_ =
-        EventExecutor::create(desktop_opts.width, desktop_opts.height, 0, 0);
+    executor_ = EventExecutor::create(capwin_opts.width, capwin_opts.height,
+                                      capture_opts.width, capture_opts.height);
     stats_observer_ = StatsObserver::Create(stats_json_);
 
     cc_->set_peer_observer(pc_.get()); // recursive reference?
@@ -79,9 +79,9 @@ MainWindow::MainWindow(mu_Context *ctx, int argc, char *argv[]) : ctx_(ctx)
     auto cameras = CameraCapturer::GetDeviceList();
     if (!cameras.empty()) {
         logger::info("supported cameras: {}", cameras);
-        auto opts = cameracap_opts;
+        auto opts = camera_opts;
         opts.uniq = cameras[0].second.c_str();
-        camera_renderer_ = VideoRenderer::Create(camera_opts);
+        camera_renderer_ = VideoRenderer::Create(camwin_opts);
         camera_video_src_ = CameraCapturer::Create(opts);
         pc_->add_camera_video_source(camera_video_src_);
         pc_->add_camera_sinks(camera_renderer_);
@@ -149,42 +149,44 @@ void MainWindow::stop() { running_ = false; }
 
 void MainWindow::run()
 {
-    auto main_id = SDL_GetWindowID(r_get_window());
-    auto desk_id = SDL_GetWindowID(screen_renderer_->get_window());
 
-    auto is_main_event = [main_id](SDL_Event &e) -> bool {
+    auto is_main_event = [this](SDL_Event &e) -> bool {
+        auto main_id = SDL_GetWindowID(r_get_window());
         return e.window.windowID == main_id || e.type == SDL_CLIPBOARDUPDATE;
     };
 
-    auto is_remote_event = [this, desk_id](SDL_Event &e) -> bool {
-        return screen_renderer_ &&
-               (e.window.windowID == desk_id || e.drop.windowID == desk_id);
+    auto is_remote_event = [this](SDL_Event &e) -> bool {
+        if (!screen_renderer_) {
+            return false;
+        }
+        auto desk_id = SDL_GetWindowID(screen_renderer_->get_window());
+        return e.window.windowID == desk_id || e.drop.windowID == desk_id;
+    };
+
+    auto update_stats = [](unsigned tick, void *param) -> unsigned {
+        auto *that = static_cast<MainWindow *>(param);
+        if (that->cc_->calling()) {
+            that->pc_->get_stats();
+        }
+        return tick;
+    };
+
+    auto toggle_grab = [this] {
+        auto window = screen_renderer_->get_window();
+        auto state = SDL_GetWindowGrab(window);
+        SDL_SetWindowGrab(window, state ? SDL_FALSE : SDL_TRUE);
+        logger::debug("escape shortcuts met, {} grab mode",
+                      state ? "leaving" : "entering");
     };
 
     SDL_Event e;
     EventExecutor::Event ee;
     std::optional<PeerClient::ChanMessage> msg;
     auto work = boost::asio::make_work_guard(ioctx_);
+    auto timer = SDL_AddTimer(5000, update_stats, this);
+    Trigger::on({SDLK_LCTRL, SDLK_LSHIFT, SDLK_LALT, SDLK_q}, toggle_grab);
 
-    auto timer = SDL_AddTimer(
-        5000,
-        [](unsigned tick, void *param) -> unsigned {
-            auto *that = static_cast<MainWindow *>(param);
-            if (that->cc_->calling()) {
-                that->pc_->get_stats();
-            }
-            return tick;
-        },
-        this);
-    Trigger::on({SDLK_LCTRL, SDLK_LSHIFT, SDLK_LALT, SDLK_q}, [this] {
-        auto window = screen_renderer_->get_window();
-        auto state = SDL_GetWindowGrab(window);
-        SDL_SetWindowGrab(window, state ? SDL_FALSE : SDL_TRUE);
-        logger::debug("escape shortcuts met, {} grab mode",
-                      state ? "leaving" : "entering");
-    });
-
-    // force no generation for SDL_TEXTINPUT event
+    // force no generation for SDL_TEXTINPUT event?
     SDL_StopTextInput();
     running_ = true;
     while (running_) {
