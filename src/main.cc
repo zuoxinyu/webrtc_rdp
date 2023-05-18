@@ -1,5 +1,6 @@
 #include "SDL2/SDL_video.h"
 #include "main_window.hh"
+#include <slint.h>
 extern "C" {
 #include "ui/microui.h"
 #include "ui/renderer.h"
@@ -38,18 +39,7 @@ int main(int argc, char *argv[])
     SDL_SetHint(SDL_HINT_ALLOW_ALT_TAB_WHILE_GRABBED, "1");
     SDL_SetHint(SDL_HINT_WINDOWS_NO_CLOSE_ON_ALT_F4, "1");
 
-    r_init();
-    auto *ctx = new mu_Context;
-    mu_init(ctx);
-    ctx->text_width = [](mu_Font font, const char *text, int len) {
-        if (len == -1) {
-            len = strlen(text);
-        }
-        return r_get_text_width(text, len);
-    };
-    ctx->text_height = [](mu_Font font) { return r_get_text_height(); };
-
-    MainWindow wnd(ctx, argc, argv);
+    MainWindow wnd(argc, argv);
     wnd.run();
     return 0;
 }

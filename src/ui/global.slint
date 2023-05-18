@@ -1,0 +1,43 @@
+export struct PeerData {
+    name:   string,
+    id:     string,
+    online: bool,
+}
+
+export global ClientState {
+    callback login;
+    callback logout;
+    callback exit;
+    callback connect(string);
+    callback disconnect();
+    callback open-stat();
+    callback open-chat();
+
+    in-out property<string>   user;
+    in-out property<string>   host;
+    in-out property<string>   port;
+    in-out property<bool>     enable-video;
+    in-out property<bool>     enable-voice;
+    in-out property<bool>     calling: false;
+    in-out property<PeerData> current;
+    in-out property<PeerData> me: {name: "Morisa", id: "0", online: true};
+    in property<bool>         signed: false;
+    in property<[PeerData]>   peers;
+
+    in-out property<bool> show-chat: false;
+    in-out property<bool> show-stat: false;
+
+    in-out property<string> chat-log: "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Proin a hendrerit libero. Duis malesuada ipsum id justo pretium consequat. Aenean mollis turpis porta pharetra mollis. Aliquam nunc neque, ultricies eu commodo eget, malesuada eget lorem. Quisque eget ante a nunc maximus mattis ut ut mauris. Ut mi nisl, lobortis vitae dolor nec, sagittis elementum mauris. Quisque ultrices sed sem rhoncus viverra. Vivamus vitae aliquet nibh, eget mattis nisi.";
+    in-out property<string> editing-text;
+}
+
+export global Skin {
+    in-out property<color> border-color: #00000022;
+    in-out property<color> bg-normal:    #00000000;
+    in-out property<color> bg-press:     #00000011;
+    in-out property<color> bg-hover:     #00000088;
+    in-out property<color> fg-normal:    #000000FF;
+    in-out property<color> fg-press:     #000000FF;
+    in-out property<color> fg-hover:     #000000FF;
+}
+

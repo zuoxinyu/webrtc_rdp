@@ -1,11 +1,14 @@
 #include "main_window.hh"
 #include "executor/event_executor.hh"
 #include "ui/sdl_trigger.hh"
+#include <slint_sharedvector.h>
 extern "C" {
 #include "ui/microui.h"
 #include "ui/renderer.h"
 }
 
+#include <chrono>
+#include <functional>
 #include <thread>
 
 #include <SDL2/SDL.h>
@@ -13,6 +16,8 @@ extern "C" {
 #include <SDL2/SDL_video.h>
 #include <absl/flags/flag.h>
 #include <boost/asio.hpp>
+#include <slint.h>
+#include <slint_platform.h>
 
 static const VideoRenderer::Config camwin_opts = {.name = "camera video",
                                                   .width = 600,
@@ -33,7 +38,7 @@ static const ScreenCapturer::Config capture_opts = {.fps = 60,
                                                     .exlude_window_id = {}};
 static const CameraCapturer::Config camera_opts = {
     .width = 600, .height = 400, .fps = 30, .uniq = ""};
-ABSL_FLAG(std::string, user, "username", "signaling name");
+ABSL_FLAG(std::string, user, "Morisa", "signaling name");
 ABSL_FLAG(std::string, host, "10.10.10.133", "signal server host");
 ABSL_FLAG(int, port, 8888, "signal server port");
 ABSL_FLAG(bool, auto_login, true, "auto login");
@@ -47,19 +52,30 @@ ABSL_FLAG(std::vector<std::string>, servers,
           }),
           "stun servers");
 
-MainWindow::MainWindow(mu_Context *ctx, int argc, char *argv[]) : ctx_(ctx)
+MainWindow::MainWindow(int argc, char *argv[]) : app_(App::create())
 {
     need_login_ = absl::GetFlag(FLAGS_auto_login);
-
     chatbuf_.reserve(6400);
+
     pc_conf_.stun_servers = absl::GetFlag(FLAGS_servers);
     pc_conf_.use_codec = absl::GetFlag(FLAGS_use_h264);
     cc_conf_.host = absl::GetFlag(FLAGS_host);
     cc_conf_.port = absl::GetFlag(FLAGS_port);
     cc_conf_.name = absl::GetFlag(FLAGS_user);
-    std::strcpy(namebuf, absl::GetFlag(FLAGS_user).c_str());
-    std::strcpy(hostbuf, absl::GetFlag(FLAGS_host).c_str());
-    std::strcpy(portbuf, std::to_string(absl::GetFlag(FLAGS_port)).c_str());
+
+    app_ = App::create();
+    app_->set_user(slint::SharedString(cc_conf_.name));
+    app_->set_host(slint::SharedString(absl::GetFlag(FLAGS_host)));
+    app_->set_port(slint::SharedString::from_number(absl::GetFlag(FLAGS_port)));
+    global().on_login([this] { login(); });
+    global().on_logout([this] { logout(); });
+    global().on_exit([this] { stop(); });
+    global().on_connect(
+        [this](const slint::SharedString &id) { connect(id.data()); });
+    global().on_open_chat([this] { open_chat(); });
+    global().on_open_stat([this] { open_stat(); });
+
+    app_->show();
 
     // TODO: delay heavy works
     pc_ = std::make_unique<PeerClient>(pc_conf_);
@@ -67,13 +83,15 @@ MainWindow::MainWindow(mu_Context *ctx, int argc, char *argv[]) : ctx_(ctx)
     screen_renderer_ = VideoRenderer::Create(capwin_opts);
     screen_video_src_ = ScreenCapturer::Create(capture_opts);
 
-    executor_ = EventExecutor::create(capwin_opts.width, capwin_opts.height,
-                                      capture_opts.width, capture_opts.height);
+    ee_ = EventExecutor::create(capwin_opts.width, capwin_opts.height,
+                                capture_opts.width, capture_opts.height);
     stats_observer_ = StatsObserver::Create(stats_json_);
 
+    cc_->set_ui_observer_(this);
     cc_->set_peer_observer(pc_.get()); // recursive reference?
     pc_->set_signaling_observer(cc_.get());
     pc_->set_stats_observer(stats_observer_.get());
+
     pc_->add_screen_video_source(screen_video_src_);
     pc_->add_screen_sinks(screen_renderer_);
     auto cameras = CameraCapturer::GetDeviceList();
@@ -91,11 +109,10 @@ MainWindow::MainWindow(mu_Context *ctx, int argc, char *argv[]) : ctx_(ctx)
 void MainWindow::login()
 {
     need_login_ = false;
+    auto port = std::atoi(app_->get_port().data());
+    auto host = app_->get_host().data();
 
-    auto port = std::atoi(portbuf);
-    auto host = std::string{hostbuf};
-
-    cc_->set_name(namebuf);
+    cc_->set_name(app_->get_user().data());
     cc_->login(host, port);
 }
 
@@ -119,7 +136,7 @@ void MainWindow::disconnect()
         cc_->stop_session();
 }
 
-void MainWindow::open_stats()
+void MainWindow::open_stat()
 {
     if (cc_->calling()) {
         show_stats_ = true;
@@ -149,26 +166,10 @@ void MainWindow::stop() { running_ = false; }
 
 void MainWindow::run()
 {
-
-    auto is_main_event = [this](SDL_Event &e) -> bool {
-        auto main_id = SDL_GetWindowID(r_get_window());
-        return e.window.windowID == main_id || e.type == SDL_CLIPBOARDUPDATE;
-    };
-
-    auto is_remote_event = [this](SDL_Event &e) -> bool {
-        if (!screen_renderer_) {
-            return false;
+    auto update_stats = [this]() {
+        if (cc_->calling()) {
+            pc_->get_stats();
         }
-        auto desk_id = SDL_GetWindowID(screen_renderer_->get_window());
-        return e.window.windowID == desk_id || e.drop.windowID == desk_id;
-    };
-
-    auto update_stats = [](unsigned tick, void *param) -> unsigned {
-        auto *that = static_cast<MainWindow *>(param);
-        if (that->cc_->calling()) {
-            that->pc_->get_stats();
-        }
-        return tick;
     };
 
     auto toggle_grab = [this] {
@@ -179,17 +180,11 @@ void MainWindow::run()
                       state ? "leaving" : "entering");
     };
 
-    SDL_Event e;
-    EventExecutor::Event ee;
-    std::optional<PeerClient::ChanMessage> msg;
-    auto work = boost::asio::make_work_guard(ioctx_);
-    auto timer = SDL_AddTimer(5000, update_stats, this);
-    Trigger::on({SDLK_LCTRL, SDLK_LSHIFT, SDLK_LALT, SDLK_q}, toggle_grab);
+    auto poll = [=, this]() {
+        SDL_Event e;
+        EventExecutor::Event ee;
+        std::optional<PeerClient::ChanMessage> msg;
 
-    // force no generation for SDL_TEXTINPUT event?
-    SDL_StopTextInput();
-    running_ = true;
-    while (running_) {
         while (ioctx_.poll()) {
             ;
         }
@@ -199,7 +194,7 @@ void MainWindow::run()
                 ee.native_ev = *reinterpret_cast<SDL_Event *>(
                     const_cast<uint8_t *>(msg.value().data));
 
-                executor_->execute(ee);
+                ee_->execute(ee);
             } else {
                 std::string text((const char *)msg->data, msg->size);
                 update_chat(cc_->peer().name, text.c_str());
@@ -207,93 +202,20 @@ void MainWindow::run()
         }
 
         while (SDL_PollEvent(&e)) {
-            if (e.type == SDL_QUIT) {
-                stop();
-            } else if (is_main_event(e)) {
-                handle_main_event(e);
-            } else if (is_remote_event(e)) {
-                handle_remote_event(e);
-            }
+            handle_remote_event(e);
         }
 
-        process_mu_windows();
-
-        process_mu_commands();
+        app_->set_signed(cc_->online());
 
         screen_renderer_->update_frame();
-        //::usleep(12000);
-    }
+    };
 
-    SDL_RemoveTimer(timer);
-}
+    Trigger::on({SDLK_LCTRL, SDLK_LSHIFT, SDLK_LALT, SDLK_q}, toggle_grab);
+    slint::Timer stats_timer(std::chrono::seconds(5), update_stats);
+    slint::Timer poll_timer(std::chrono::milliseconds(0), poll);
+    auto work = boost::asio::make_work_guard(ioctx_);
 
-void MainWindow::process_mu_windows()
-{
-    mu_begin(ctx_);
-    peers_window(ctx_);
-    login_window(ctx_);
-    if (cc_->calling()) {
-        if (show_stats_) {
-            stats_window(ctx_);
-        } else {
-            chat_window(ctx_);
-        }
-    }
-    mu_end(ctx_);
-}
-
-void MainWindow::handle_main_event(SDL_Event &e)
-{
-    switch (e.type) {
-    case SDL_QUIT:
-        stop();
-        break;
-    case SDL_WINDOWEVENT:
-        switch (e.window.event) {
-        case SDL_WINDOWEVENT_CLOSE:
-            stop();
-            break;
-        }
-        break;
-    case SDL_MOUSEMOTION:
-        mu_input_mousemove(ctx_, e.motion.x, e.motion.y);
-        break;
-    case SDL_MOUSEWHEEL:
-        mu_input_scroll(ctx_, 0, e.wheel.y * -30);
-        break;
-    case SDL_TEXTINPUT:
-        mu_input_text(ctx_, e.text.text);
-        break;
-
-    case SDL_MOUSEBUTTONDOWN:
-    case SDL_MOUSEBUTTONUP: {
-        int b = button_map[e.button.button & 0xff];
-        if (b && e.type == SDL_MOUSEBUTTONDOWN) {
-            mu_input_mousedown(ctx_, e.button.x, e.button.y, b);
-        }
-        if (b && e.type == SDL_MOUSEBUTTONUP) {
-            mu_input_mouseup(ctx_, e.button.x, e.button.y, b);
-        }
-        break;
-    }
-
-    case SDL_KEYDOWN:
-    case SDL_KEYUP: {
-        int c = key_map[e.key.keysym.sym & 0xff];
-        if (c && e.type == SDL_KEYDOWN) {
-            mu_input_keydown(ctx_, c);
-        }
-        if (c && e.type == SDL_KEYUP) {
-            mu_input_keyup(ctx_, c);
-        }
-        break;
-    }
-    case SDL_CLIPBOARDUPDATE:
-        char *clip_text = SDL_GetClipboardText();
-        logger::debug("clip board updated: {}", clip_text);
-        SDL_free(clip_text);
-        break;
-    }
+    slint::run_event_loop();
 }
 
 void MainWindow::handle_remote_event(SDL_Event &e)
@@ -321,28 +243,35 @@ void MainWindow::handle_remote_event(SDL_Event &e)
                                  sizeof(ev));
     } break;
     }
-    // TODO: handle failure
 }
 
-void MainWindow::process_mu_commands()
+static PeerData to_peer_data(const Peer &p)
 {
-    r_clear(mu_color(bg[0], bg[1], bg[2], 255));
-    mu_Command *cmd = nullptr;
-    while (mu_next_command(ctx_, &cmd)) {
-        switch (cmd->type) {
-        case MU_COMMAND_TEXT:
-            r_draw_text(cmd->text.str, cmd->text.pos, cmd->text.color);
-            break;
-        case MU_COMMAND_RECT:
-            r_draw_rect(cmd->rect.rect, cmd->rect.color);
-            break;
-        case MU_COMMAND_ICON:
-            r_draw_icon(cmd->icon.id, cmd->icon.rect, cmd->icon.color);
-            break;
-        case MU_COMMAND_CLIP:
-            r_set_clip_rect(cmd->clip.rect);
-            break;
+    return {
+        slint::SharedString(p.name),
+        slint::SharedString(p.id),
+        p.online,
+
+    };
+}
+
+void MainWindow::OnPeersChanged(Peer::List peers)
+{
+    slint::invoke_from_event_loop([this, peers = std::move(peers)] {
+        auto model = std::make_shared<slint::VectorModel<PeerData>>();
+        for (const auto &[id, p] : peers) {
+            model->push_back(to_peer_data(p));
         }
-    }
-    r_present();
+        app_->set_peers(model);
+    });
+}
+
+void MainWindow::OnLogin(Peer me)
+{
+    slint::invoke_from_event_loop([this, me] { app_->set_signed(me.online); });
+}
+
+void MainWindow::OnLogout(Peer me)
+{
+    slint::invoke_from_event_loop([this, me] { app_->set_signed(me.online); });
 }

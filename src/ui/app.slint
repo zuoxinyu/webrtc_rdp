@@ -1,0 +1,92 @@
+import {Button, VerticalBox, LineEdit, HorizontalBox, CheckBox, AboutSlint, ListView, StandardTableView, ScrollView, TextEdit, GridBox, GroupBox, TabWidget} from "std-widgets.slint";
+import {ClientState} from "global.slint";
+import {Login} from "login.slint";
+import {Chat} from "chat.slint";
+
+component MenuItem inherits Rectangle {
+    // in property <image> icon <=> i.source;
+    in property<string> name <=> t.text;
+    in-out property<bool> active;
+    background: root.active ? rgba(100%, 100%, 100%, 14%) : ma.has-hover ? rgba(100%, 100%, 100%, 9%) : transparent;
+    ma := TouchArea {}
+    HorizontalLayout {
+        alignment: start;
+        spacing: 6px;
+        padding: 8px;
+        padding-left: 30px;
+        padding-right: 30px;
+        Rectangle {
+            width: 14px;
+        }
+        // i := Image {
+        //     width: 14px;
+        //     height: self.source.height * 1px;
+        // }
+        t := Text {
+            color: white;
+            font-size: 10px;
+        }
+    }
+}
+
+export component MenuBar inherits Rectangle {
+    background: rgb(90, 140, 206);
+    out property<int> active: 0;
+    min-width: 140px;
+    VerticalLayout {
+        padding-left: 0px;
+        padding-top: 35px;
+        padding-right: 0px;
+        padding-bottom: 10px;
+        spacing: 8px;
+        VerticalLayout {
+            // Image {
+            //     source: @image-url("images/main-icon.png");
+            //     height: self.source.height * 1px;
+            // }
+        }
+        for entry[idx] in [
+            { name: "Peers" },
+            { name: "Settings" },
+            { name: "Devices" },
+            { name: "Statistics" },
+        ] : MenuItem {
+            name: entry.name;
+            active: root.active == idx;
+        }
+        Rectangle {}
+        MenuItem { name: "Logout"; }
+    }
+}
+
+export component App inherits Window {
+    title: "Dezk";
+
+    no-frame: false;
+    width: 750px;
+    height: 450px;
+
+    touch := TouchArea {}
+    if ClientState.signed: HorizontalLayout {
+        padding: 0;
+        spacing: 0;
+        alignment: start;
+        menu := MenuBar {
+            width: 150px;
+        }
+
+        chat := Chat {
+            width: parent.width - menu.width;
+        }
+    }
+
+    if !ClientState.signed: HorizontalLayout {
+        alignment: center;
+        padding-top: 80px;
+        padding-bottom: 80px;
+        padding-left: 120px;
+        padding-right: 120px;
+        spacing: 10px;
+        Login {}
+    }
+}

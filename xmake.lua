@@ -7,45 +7,9 @@ set_defaultmode("debug")
 local webrtc_dir = '../webrtc'
 local webrtc_branch = 'm113 refs/remotes/branch-heads/5672'
 local webrtc_src_dir = path.join(webrtc_dir, 'src')
-local webrtc_out_dir = path.join('out', os.host() .. '-debug')
+local webrtc_out_dir = path.join('out', '$(os)' .. '-' .. '$(mode)')
 local webrtc_obj_dir = path.join(webrtc_src_dir, webrtc_out_dir, 'obj')
-
-local gn_args = {
-    'is_debug=true',
-    'enable_libaom=true', -- av1 support
-    'rtc_use_h264=false', --  use custom h264 impl
-    'rtc_include_tests=false',
-    'rtc_enable_protobuf=false',
-    -- 'ffmpeg_branding=\"Chrome\"',
-    'use_rtti=true',           -- typeinfo
-    'use_custom_libcxx=false', -- stdlib
-    'use_debug_fission=true',  -- -gsplit-dwarf
-    -- 'rtc_enable_symbol_export=true',
-}
-
-if is_os('windows') then
-    gn_args = {
-        'is_debug=true',
-        'enable_libaom=true', -- av1 support
-        'rtc_use_h264=false', -- use custom h264 impl
-        -- 'ffmpeg_branding=\"Chrome\"',
-        'rtc_include_tests=false',
-        'rtc_enable_protobuf=false',
-        -- for windows
-        'use_lld=false',           -- linker
-        'use_rtti=true',           -- typeinfo
-        'use_custom_libcxx=false', -- stdlib
-        'fatal_linker_warnings=false',
-        'treat_warnings_as_errors=false',
-        'enable_iterator_debugging=true',
-        -- no rtc_enable_symbol_export, which leads build errors
-    }
-end
-
-local check_cmd = string.format([[git checkout -b %s]], webrtc_branch)
-local gn_cmd = string.format([[gn gen %s --args="%s"]], webrtc_out_dir, table.concat(gn_args, ' '))
-local ninja_cmd = string.format([[ninja -C %s]], webrtc_out_dir)
-local mt_cmd = [[mt.exe -manifest .\dezk.manifest -outputresource:'.\build\windows\x64\debug\dezk.exe;#1']]
+local slint_dir = './third_party/Slint-cpp-1.0.2-Linux-x86_64'
 
 add_requireconfs("*", { configs = { shared = false, system = true, debug = true }, shared = false })
 
@@ -127,13 +91,15 @@ target('dezk', function()
     set_kind('binary')
     set_languages('c17', 'cxx20')
     add_cxxflags('-Wno-deprecated-declarations')
+    add_defines('SLINT_FEATURE_EXPERIMENTAL')
 
-    add_includedirs('src', webrtc_src_dir)
-    add_files('src/client/**.cc', 'src/client/**.c')
-    remove_files("**_test.cc")
+    add_includedirs('src', webrtc_src_dir, slint_dir .. '/include')
+    add_files('src/**.cc', 'src/**.c')
+    remove_files('src/server/**.cc')
+    remove_files('src/**_test.cc')
 
-    add_linkdirs(webrtc_obj_dir)
-    add_links('webrtc')
+    add_linkdirs(webrtc_obj_dir, slint_dir .. '/lib')
+    add_links('webrtc', 'slint_cpp')
 
     if is_os('linux') then
         linux_options()
@@ -183,7 +149,7 @@ if get_config('buildtest') == 1 then
     target('video_player_test', function()
         set_kind('binary')
         set_languages('c17', 'cxx20')
-        add_files('src/client/sink/*.cc')
+        add_files('src/sink/*.cc')
         add_includedirs('src', webrtc_src_dir)
         add_packages('spdlog', 'fmt', 'sdl2', 'sdl2-ttf', 'glew')
         add_linkdirs(webrtc_obj_dir)
@@ -202,7 +168,7 @@ if get_config('buildtest') == 1 then
             set_kind('binary')
             set_languages('c17', 'cxx20')
             add_includedirs('src')
-            add_files('src/client/executor/*.cc')
+            add_files('src/executor/*.cc')
             add_vcpkg('sdl2', 'spdlog')
             if is_os('linux') then
                 add_packages('xdo')
@@ -214,10 +180,47 @@ if get_config('buildtest') == 1 then
     end
 end
 
+-- TODO: use package() instead
+local gn_args = {
+    'is_debug=true',
+    'enable_libaom=true', -- av1 support
+    'rtc_use_h264=false', --  use custom h264 impl
+    'rtc_include_tests=false',
+    'rtc_enable_protobuf=false',
+    -- 'ffmpeg_branding=\"Chrome\"',
+    'use_rtti=true',           -- typeinfo
+    'use_custom_libcxx=false', -- stdlib
+    'use_debug_fission=true',  -- -gsplit-dwarf
+    -- 'rtc_enable_symbol_export=true',
+}
+
+if is_os('windows') then
+    gn_args = {
+        'is_debug=true',
+        'enable_libaom=true', -- av1 support
+        'rtc_use_h264=false', -- use custom h264 impl
+        -- 'ffmpeg_branding=\"Chrome\"',
+        'rtc_include_tests=false',
+        'rtc_enable_protobuf=false',
+        -- for windows
+        'use_lld=false',           -- linker
+        'use_rtti=true',           -- typeinfo
+        'use_custom_libcxx=false', -- stdlib
+        'fatal_linker_warnings=false',
+        'treat_warnings_as_errors=false',
+        'enable_iterator_debugging=true',
+        -- no rtc_enable_symbol_export, which leads build errors
+    }
+end
+
+local check_cmd = string.format([[git checkout -b %s]], webrtc_branch)
+local gn_cmd = string.format([[gn gen %s --args="%s"]], webrtc_out_dir, table.concat(gn_args, ' '))
+local ninja_cmd = string.format([[ninja -C %s]], webrtc_out_dir)
+local mt_cmd = [[mt.exe -manifest .\dezk.manifest -outputresource:'.\build\windows\x64\debug\dezk.exe;#1']]
 task('fetch-webrtc', function()
     on_run(function()
         os.cd(webrtc_dir)
-        os.exec('fetch webrtc')
+        os.exec('fetch webrtc') -- TODO: need install depot_tools
         os.cd(webrtc_src_dir)
         os.exec(check_cmd)
     end)
@@ -240,6 +243,19 @@ task('build-webrtc', function()
     }
 end)
 
+task('fetch-slint', function()
+    on_run(function()
+        os.cd('third_party')
+        os.exec(
+            'wget -c https://github.com/slint-ui/slint/releases/download/v1.0.2/Slint-cpp-1.0.2-Linux-x86_64.tar.gz -O - | tar -zx')
+    end)
+
+    set_menu {
+        usage = 'xmake fetch-slint',
+        description = 'fetch slint binary release',
+    }
+end)
+
 task('echo-cmd', function()
     on_run(function()
         cprint('${yellow}webrtc dir${clear}: %s', path.absolute(webrtc_src_dir))
@@ -253,3 +269,14 @@ task('echo-cmd', function()
         description = 'show webrtc build commands',
     }
 end)
+
+-- package("slint", function()
+--     add_deps("cmake")
+--     set_sourcedir(path.join(os.scriptdir(), "third_party", 'Slint-cpp-1.0.2-Linux-x86_64'))
+--     on_install(function(package)
+--         local configs = {}
+--         table.insert(configs, "-DCMAKE_BUILD_TYPE=" .. (package:debug() and "Debug" or "Release"))
+--         table.insert(configs, "-DBUILD_SHARED_LIBS=" .. (package:config("shared") and "ON" or "OFF"))
+--         import("package.tools.cmake").install(package, configs)
+--     end)
+-- end)
