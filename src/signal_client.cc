@@ -1,5 +1,5 @@
 #include "signal_client.hh"
-#include "client/callbacks.hh"
+#include "callbacks.hh"
 #include "logger.hh"
 
 #include <algorithm>
@@ -70,6 +70,8 @@ awaitable<void> SignalClient::signin(std::string host, int port)
         me_.online = true;
 
         set_peers(json::parse(resp.body()));
+
+        ui_observer_->OnLogin(me_);
     } catch (beast::system_error &se) {
         if (se.code() == http::error::end_of_stream) {
             logger::error("login failed: server closed");
@@ -153,6 +155,7 @@ void SignalClient::do_logout()
     stream_.close();
     wait_timer_.cancel();
     me_.online = false;
+    ui_observer_->OnLogout(me_);
 }
 
 awaitable<void> SignalClient::send_message(Peer::Id peer_id,
@@ -215,29 +218,9 @@ void SignalClient::set_peers(const json &v)
         peer_observer_->OnSignal(MessageType::kBye, "bye");
         current_peer_ = {};
     }
+
+    ui_observer_->OnPeersChanged(peers_);
 }
-
-const Peer::List SignalClient::online_peers() const
-{
-    Peer::List online_peers;
-    for (auto &p : peers_) {
-        if (p.second.online) {
-            online_peers.insert(p);
-        }
-    }
-    return online_peers;
-};
-
-const Peer::List SignalClient::offline_peers() const
-{
-    Peer::List offline_peers;
-    for (auto &p : peers_) {
-        if (!p.second.online) {
-            offline_peers.insert(p);
-        }
-    }
-    return offline_peers;
-};
 
 // SignalingObserver
 void SignalClient::SendSignal(MessageType mt, const std::string &msg)

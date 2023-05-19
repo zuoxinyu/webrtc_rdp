@@ -1,0 +1,51 @@
+import { Button, VerticalBox, LineEdit, HorizontalBox, CheckBox, AboutSlint, ListView, StandardTableView, ScrollView, TextEdit, GridBox, GroupBox, TabWidget} from "std-widgets.slint";
+import {ClientState} from "global.slint";
+
+export component Login {
+    in-out property user <=> user.text;
+    in-out property host <=> host.text; 
+    in-out property port <=> port.text;
+    in-out property enable-video <=> video.enabled;
+    in-out property enable-voice <=> voice.enabled;
+
+    VerticalBox { 
+        alignment: center;
+        user := LineEdit {
+            text <=> ClientState.user;
+            preferred-height: 20px;
+            preferred-width: 250px;
+            placeholder-text: "login name";
+        }
+
+        host := LineEdit {
+            text <=> ClientState.host;
+            preferred-height: 20px;
+            preferred-width: 250px;
+            placeholder-text: "server host";
+        }
+
+        port := LineEdit {
+            text <=> ClientState.port;
+            preferred-height: 20px;
+            preferred-width: 250px;
+            placeholder-text: "server port";
+        }
+
+        HorizontalBox {
+            video := CheckBox { text: "Video"; checked <=> ClientState.enable-video;}
+            voice := CheckBox { text: "Voice"; checked <=> ClientState.enable-voice;}
+        }
+
+        HorizontalBox {
+            login-btn := Button {
+                text: "Login";
+                clicked => { ClientState.login(); }
+            }
+            exit-btn := Button {
+                text: "Exit";
+                clicked => { ClientState.exit(); }
+            }
+        }
+    }
+}
+

@@ -46,13 +46,18 @@ struct SignalClient : public SignalingObserver {
     explicit SignalClient(io_context &ctx, Config conf);
     ~SignalClient();
 
-  public:
     void set_peer_observer(PeerObserver *observer)
     {
         peer_observer_ = observer;
     }
+
+    void set_ui_observer_(UIObserver *observer) { ui_observer_ = observer; }
+
     void login(const std::string &server, int port);
     void logout();
+    void start_session(Peer::Id peer_id);
+    void stop_session();
+
     bool online() const { return me_.online; }
     bool calling() const { return current_peer_.has_value(); }
     const std::string id() const { return me_.id; }
@@ -60,11 +65,7 @@ struct SignalClient : public SignalingObserver {
     void set_name(std::string name) { me_.name = std::move(name); }
     const Peer::Id current() const { return current_peer_.value(); }
     const Peer &peer() const { return peers_.at(current()); }
-    void start_session(Peer::Id peer_id);
-    void stop_session();
     const Peer::List &peers() const { return peers_; }
-    const Peer::List online_peers() const;
-    const Peer::List offline_peers() const;
 
   public:
     void SendSignal(MessageType, const std::string &) override;
@@ -90,6 +91,7 @@ struct SignalClient : public SignalingObserver {
     beast::tcp_stream stream_;
     asio::steady_timer wait_timer_;
     PeerObserver *peer_observer_;
+    UIObserver *ui_observer_;
 
     // states
     Config conf_;

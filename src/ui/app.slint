@@ -1,0 +1,96 @@
+import {Button, VerticalBox, LineEdit, HorizontalBox, CheckBox, AboutSlint, ListView, StandardTableView, ScrollView, TextEdit, GridBox, GroupBox, TabWidget} from "std-widgets.slint";
+import {ClientState} from "global.slint";
+import {Login} from "login.slint";
+import {Chat} from "chat.slint";
+import {PeerList} from "peers.slint";
+
+component MenuItem inherits Rectangle {
+    callback clicked <=> ma.clicked;
+    // in property <image> icon <=> i.source;
+    in property<string> name <=> t.text;
+    in property<int> id;
+    in-out property<bool> active;
+    background: root.active ? rgba(100%, 100%, 100%, 14%) : ma.has-hover ? rgba(100%, 100%, 100%, 9%) : transparent;
+    ma := TouchArea { }
+    HorizontalLayout {
+        alignment: start;
+        spacing: 6px;
+        padding: 8px;
+        padding-left: 30px;
+        padding-right: 30px;
+        Rectangle {
+            width: 14px;
+        }
+        // i := Image {
+        //     width: 14px;
+        //     height: self.source.height * 1px;
+        // }
+        t := Text {
+            color: white;
+            font-size: 10px;
+        }
+    }
+}
+
+export component MenuBar inherits Rectangle {
+    out property<int> active: 0;
+    in  property<[{name: string}]> items;
+
+    background: rgb(90, 140, 206);
+    min-width: 140px;
+    VerticalLayout {
+        padding-left: 0px;
+        padding-top: 35px;
+        padding-right: 0px;
+        padding-bottom: 10px;
+        spacing: 8px;
+        VerticalLayout { } //logo
+        for entry[idx] in items : MenuItem {
+            name: entry.name;
+            active: root.active == idx;
+            clicked => {root.active = idx;}
+        }
+        Rectangle {}
+        MenuItem {
+            name: "Logout";
+            clicked => {
+                ClientState.logout();
+            }
+        }
+    }
+}
+
+export component App inherits Window {
+    title: "Dezk";
+    no-frame: false;
+    width: 750px;
+    height: 450px;
+
+    touch := TouchArea {}
+    if ClientState.online: HorizontalLayout {
+        padding: 0;
+        spacing: 0;
+        alignment: start;
+
+        menu := MenuBar {
+            width: 150px;
+            items: [
+                {name: "Remotes"},
+                {name: "Chat"},
+                {name: "Statistics"},
+                {name: "Settings"},
+            ];
+        }
+
+        page := VerticalLayout {
+            width: root.width - menu.width;
+
+            if menu.active == 0: PeerList {}
+            if menu.active == 1: Chat {}
+        }
+    }
+
+    if !ClientState.online: Login {}
+}
+
+export {ClientState}

@@ -1,0 +1,46 @@
+import {Button, TextEdit, VerticalBox, HorizontalBox, TabWidget, ScrollView} from "std-widgets.slint";
+import {ClientState} from "global.slint";
+
+export component Chat {
+    VerticalBox {
+        TabWidget { 
+            Tab {
+                title: "Morisa";
+                VerticalBox {
+                    ScrollView { 
+                        padding: 20px;
+                        Text {
+                           width: 100%;
+                           text <=> ClientState.chat-log;
+                           wrap: TextWrap.word-wrap;
+                        }
+                    }
+
+                }
+            }
+            Tab {
+                title: "Remu";
+                VerticalBox {
+                    ScrollView { 
+                        Text {
+                           width: 100%;
+                           text <=> ClientState.chat-log;
+                           wrap: TextWrap.word-wrap;
+                        }
+                    }
+
+                }
+            }
+        }
+        HorizontalBox {
+            TextEdit {
+                height: 40px;
+                text <=> ClientState.editing-text;
+                wrap: TextWrap.word-wrap;
+            }
+            Button {
+                text: "Send";
+            }
+        }
+    }
+}

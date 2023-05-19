@@ -2,6 +2,8 @@
 #ifndef CALLBACKS_HH_
 #define CALLBACKS_HH_
 
+#include <peer.hh>
+
 #include <string>
 
 // TODO: pranswer/rollback?
@@ -59,6 +61,12 @@ struct SignalingObserver {
 
 struct PeerObserver {
     virtual void OnSignal(MessageType, const std::string &) = 0;
+};
+
+struct UIObserver {
+    virtual void OnLogin(Peer me) = 0;
+    virtual void OnLogout(Peer me) = 0;
+    virtual void OnPeersChanged(Peer::List peers) = 0;
 };
 
 #endif // CALLBACKS_HH_

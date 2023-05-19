@@ -1,0 +1,69 @@
+import {Button, HorizontalBox, VerticalBox} from "std-widgets.slint";
+import {ClientState, PeerData} from "global.slint";
+
+component PeerItem {
+    in property<PeerData> peer;
+    out property<bool>    connected: false;
+
+    height: 30px;
+    touch := TouchArea {}
+    HorizontalBox {
+        Text {
+            text: peer.name;
+            width: 30%; 
+        }
+
+        Text {
+            text: peer.id;
+            width: 10%;
+        }
+
+        Button {
+            text: "connect";
+            clicked => {
+                if (!ClientState.calling) {
+                    ClientState.connect(peer.id);
+                    ClientState.current = peer;
+                    ClientState.calling = true;
+                    self.text = "disconnect";
+                } else {
+                    ClientState.disconnect();
+                    ClientState.calling = false;
+                    self.text = "connect";
+                }
+            }
+        }
+
+        Button {
+            text: "chat";
+            clicked => {
+                ClientState.show-chat = !ClientState.show-chat;
+            }
+        }
+
+        Button {
+            text: "stats";
+            clicked => {
+                ClientState.show-stat = true;
+            }
+        }
+    }
+}
+
+export component PeerList {
+    in property <[PeerData]> peers <=> ClientState.peers;
+
+    VerticalBox {
+        HorizontalBox {
+            height: 28px;
+            Text { text: "Name"; width: 30%; }
+            Text { text: "ID"; width: 10%; }
+        }
+        VerticalBox {
+            for p in peers: PeerItem {
+                peer: p;
+            }
+        }
+    }
+}
+

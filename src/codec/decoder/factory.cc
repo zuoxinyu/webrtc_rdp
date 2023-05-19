@@ -1,5 +1,5 @@
 #include "factory.hh"
-#include "client/codec/h264.hh"
+#include "codec/h264.hh"
 #include "h264_ffmpeg.hh"
 
 std::vector<webrtc::SdpVideoFormat>
