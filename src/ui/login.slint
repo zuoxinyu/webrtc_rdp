@@ -8,45 +8,42 @@ export component Login {
     in-out property enable-video <=> video.enabled;
     in-out property enable-voice <=> voice.enabled;
 
-    Rectangle {
-        VerticalBox { 
-            alignment: center;
+    VerticalBox { 
+        alignment: center;
+        user := LineEdit {
+            text <=> ClientState.user;
+            preferred-height: 20px;
+            preferred-width: 250px;
+            placeholder-text: "login name";
+        }
 
-            user := LineEdit {
-                text: "Morisa";
-                preferred-height: 20px;
-                preferred-width: 250px;
-                placeholder-text: "login name";
+        host := LineEdit {
+            text <=> ClientState.host;
+            preferred-height: 20px;
+            preferred-width: 250px;
+            placeholder-text: "server host";
+        }
+
+        port := LineEdit {
+            text <=> ClientState.port;
+            preferred-height: 20px;
+            preferred-width: 250px;
+            placeholder-text: "server port";
+        }
+
+        HorizontalBox {
+            video := CheckBox { text: "Video"; checked <=> ClientState.enable-video;}
+            voice := CheckBox { text: "Voice"; checked <=> ClientState.enable-voice;}
+        }
+
+        HorizontalBox {
+            login-btn := Button {
+                text: "Login";
+                clicked => { ClientState.login(); }
             }
-
-            host := LineEdit {
-                text: "10.10.10.133";
-                preferred-height: 20px;
-                preferred-width: 250px;
-                placeholder-text: "server host";
-            }
-
-            port := LineEdit {
-                text: "8888";
-                preferred-height: 20px;
-                preferred-width: 250px;
-                placeholder-text: "server port";
-            }
-
-            HorizontalBox {
-                video := CheckBox { text: "Video"; }
-                voice := CheckBox { text: "Voice"; }
-            }
-
-            HorizontalBox {
-                login-btn := Button {
-                    text: "Login";
-                    clicked => { ClientState.login(); }
-                }
-                exit-btn := Button {
-                    text: "Exit";
-                    clicked => { ClientState.exit(); }
-                }
+            exit-btn := Button {
+                text: "Exit";
+                clicked => { ClientState.exit(); }
             }
         }
     }

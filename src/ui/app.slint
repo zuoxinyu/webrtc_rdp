@@ -2,13 +2,16 @@ import {Button, VerticalBox, LineEdit, HorizontalBox, CheckBox, AboutSlint, List
 import {ClientState} from "global.slint";
 import {Login} from "login.slint";
 import {Chat} from "chat.slint";
+import {PeerList} from "peers.slint";
 
 component MenuItem inherits Rectangle {
+    callback clicked <=> ma.clicked;
     // in property <image> icon <=> i.source;
     in property<string> name <=> t.text;
+    in property<int> id;
     in-out property<bool> active;
     background: root.active ? rgba(100%, 100%, 100%, 14%) : ma.has-hover ? rgba(100%, 100%, 100%, 9%) : transparent;
-    ma := TouchArea {}
+    ma := TouchArea { }
     HorizontalLayout {
         alignment: start;
         spacing: 6px;
@@ -30,8 +33,10 @@ component MenuItem inherits Rectangle {
 }
 
 export component MenuBar inherits Rectangle {
-    background: rgb(90, 140, 206);
     out property<int> active: 0;
+    in  property<[{name: string}]> items;
+
+    background: rgb(90, 140, 206);
     min-width: 140px;
     VerticalLayout {
         padding-left: 0px;
@@ -39,54 +44,53 @@ export component MenuBar inherits Rectangle {
         padding-right: 0px;
         padding-bottom: 10px;
         spacing: 8px;
-        VerticalLayout {
-            // Image {
-            //     source: @image-url("images/main-icon.png");
-            //     height: self.source.height * 1px;
-            // }
-        }
-        for entry[idx] in [
-            { name: "Peers" },
-            { name: "Settings" },
-            { name: "Devices" },
-            { name: "Statistics" },
-        ] : MenuItem {
+        VerticalLayout { } //logo
+        for entry[idx] in items : MenuItem {
             name: entry.name;
             active: root.active == idx;
+            clicked => {root.active = idx;}
         }
         Rectangle {}
-        MenuItem { name: "Logout"; }
+        MenuItem {
+            name: "Logout";
+            clicked => {
+                ClientState.logout();
+            }
+        }
     }
 }
 
 export component App inherits Window {
     title: "Dezk";
-
     no-frame: false;
     width: 750px;
     height: 450px;
 
     touch := TouchArea {}
-    if ClientState.signed: HorizontalLayout {
+    if ClientState.online: HorizontalLayout {
         padding: 0;
         spacing: 0;
         alignment: start;
+
         menu := MenuBar {
             width: 150px;
+            items: [
+                {name: "Remotes"},
+                {name: "Chat"},
+                {name: "Statistics"},
+                {name: "Settings"},
+            ];
         }
 
-        chat := Chat {
-            width: parent.width - menu.width;
+        page := VerticalLayout {
+            width: root.width - menu.width;
+
+            if menu.active == 0: PeerList {}
+            if menu.active == 1: Chat {}
         }
     }
 
-    if !ClientState.signed: HorizontalLayout {
-        alignment: center;
-        padding-top: 80px;
-        padding-bottom: 80px;
-        padding-left: 120px;
-        padding-right: 120px;
-        spacing: 10px;
-        Login {}
-    }
+    if !ClientState.online: Login {}
 }
+
+export {ClientState}

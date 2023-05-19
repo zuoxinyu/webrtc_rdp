@@ -3,60 +3,55 @@ import {ClientState, PeerData} from "global.slint";
 
 component PeerItem {
     in property<PeerData> peer;
-    in property<bool>     connected: false;
+    out property<bool>    connected: false;
 
     height: 30px;
-    touch := TouchArea {
-        HorizontalBox {
-            Text {
-                text: peer.name;
-                width: 30%; 
-            }
+    touch := TouchArea {}
+    HorizontalBox {
+        Text {
+            text: peer.name;
+            width: 30%; 
+        }
 
-            Text {
-                text: peer.id;
-                width: 10%;
-            }
+        Text {
+            text: peer.id;
+            width: 10%;
+        }
 
-            Button {
-                text: "✔";
-                clicked => {
-                    if (ClientState.calling) {
-                        ClientState.connect(peer.id);
-                        ClientState.current = peer;
-                        ClientState.calling = true;
-                        self.text = "x";
-                    } else {
-                        ClientState.disconnect();
-                        ClientState.calling = false;
-                        self.text = "✔";
-                    }
+        Button {
+            text: "connect";
+            clicked => {
+                if (!ClientState.calling) {
+                    ClientState.connect(peer.id);
+                    ClientState.current = peer;
+                    ClientState.calling = true;
+                    self.text = "disconnect";
+                } else {
+                    ClientState.disconnect();
+                    ClientState.calling = false;
+                    self.text = "connect";
                 }
             }
+        }
 
-            Button {
-                text: "chat";
-                clicked => {
-                    ClientState.show-chat = !ClientState.show-chat;
-                }
+        Button {
+            text: "chat";
+            clicked => {
+                ClientState.show-chat = !ClientState.show-chat;
             }
+        }
 
-            Button {
-                text: "stats";
-                clicked => {
-                    ClientState.show-stat = true;
-                }
+        Button {
+            text: "stats";
+            clicked => {
+                ClientState.show-stat = true;
             }
         }
     }
 }
 
 export component PeerList {
-    in property <[PeerData]> peers: [
-        {name: "Sakuya", id: "1", online: true},
-        {name: "Alice",  id: "2", online: true},
-        {name: "Yoyoko", id: "3", online: true},
-    ];
+    in property <[PeerData]> peers <=> ClientState.peers;
 
     VerticalBox {
         HorizontalBox {

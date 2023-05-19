@@ -1,13 +1,14 @@
 #pragma once
 
-#include "app.slint.h"
-#include "stats/stats.hh"
 #include "executor/event_executor.hh"
 #include "peer_client.hh"
 #include "signal_client.hh"
 #include "sink/video_renderer.hh"
 #include "source/camera_capturer.hh"
 #include "source/screen_capturer.hh"
+#include "stats/stats.hh"
+
+#include "ui/app.slint.h"
 
 #include <memory>
 #include <string>
@@ -42,11 +43,9 @@ class MainWindow : public UIObserver
     void disconnect();
     void update_chat(const std::string &who, const char *buf);
     void post_chat(const std::string &msg);
-    void open_stat();
-    void open_chat();
 
     // misc
-    const ClientState &global() { return app_->global<ClientState>(); };
+    const ClientState &global() {return app_->global<ClientState>(); };
 
   private:
     // properties

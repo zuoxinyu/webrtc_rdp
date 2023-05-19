@@ -1,11 +1,6 @@
 #include "main_window.hh"
 #include "executor/event_executor.hh"
 #include "ui/sdl_trigger.hh"
-#include <slint_sharedvector.h>
-extern "C" {
-#include "ui/microui.h"
-#include "ui/renderer.h"
-}
 
 #include <chrono>
 #include <functional>
@@ -18,6 +13,7 @@ extern "C" {
 #include <boost/asio.hpp>
 #include <slint.h>
 #include <slint_platform.h>
+#include <slint_sharedvector.h>
 
 static const VideoRenderer::Config camwin_opts = {.name = "camera video",
                                                   .width = 600,
@@ -64,16 +60,15 @@ MainWindow::MainWindow(int argc, char *argv[]) : app_(App::create())
     cc_conf_.name = absl::GetFlag(FLAGS_user);
 
     app_ = App::create();
-    app_->set_user(slint::SharedString(cc_conf_.name));
-    app_->set_host(slint::SharedString(absl::GetFlag(FLAGS_host)));
-    app_->set_port(slint::SharedString::from_number(absl::GetFlag(FLAGS_port)));
+    global().set_user(slint::SharedString(cc_conf_.name));
+    global().set_host(slint::SharedString(absl::GetFlag(FLAGS_host)));
+    global().set_port(
+        slint::SharedString::from_number(absl::GetFlag(FLAGS_port)));
     global().on_login([this] { login(); });
     global().on_logout([this] { logout(); });
     global().on_exit([this] { stop(); });
-    global().on_connect(
-        [this](const slint::SharedString &id) { connect(id.data()); });
-    global().on_open_chat([this] { open_chat(); });
-    global().on_open_stat([this] { open_stat(); });
+    global().on_connect([this](const auto &id) { connect(id.data()); });
+    global().on_disconnect([this] { disconnect(); });
 
     app_->show();
 
@@ -109,10 +104,10 @@ MainWindow::MainWindow(int argc, char *argv[]) : app_(App::create())
 void MainWindow::login()
 {
     need_login_ = false;
-    auto port = std::atoi(app_->get_port().data());
-    auto host = app_->get_host().data();
+    auto port = std::atoi(global().get_port().data());
+    auto host = global().get_host().data();
 
-    cc_->set_name(app_->get_user().data());
+    cc_->set_name(global().get_user().data());
     cc_->login(host, port);
 }
 
@@ -136,14 +131,6 @@ void MainWindow::disconnect()
         cc_->stop_session();
 }
 
-void MainWindow::open_stat()
-{
-    if (cc_->calling()) {
-        show_stats_ = true;
-        pc_->get_stats();
-    }
-}
-
 void MainWindow::update_chat(const std::string &who, const char *buf)
 {
     fmt::format_to(std::back_inserter(chatbuf_), "{}: {}\n", who, buf);
@@ -156,13 +143,7 @@ void MainWindow::post_chat(const std::string &msg)
     pc_->post_text_message(msg);
 }
 
-void MainWindow::open_chat()
-{
-    if (cc_->calling())
-        show_stats_ = false;
-}
-
-void MainWindow::stop() { running_ = false; }
+void MainWindow::stop() { slint::quit_event_loop(); }
 
 void MainWindow::run()
 {
@@ -205,7 +186,7 @@ void MainWindow::run()
             handle_remote_event(e);
         }
 
-        app_->set_signed(cc_->online());
+        global().set_online(cc_->online());
 
         screen_renderer_->update_frame();
     };
@@ -262,16 +243,18 @@ void MainWindow::OnPeersChanged(Peer::List peers)
         for (const auto &[id, p] : peers) {
             model->push_back(to_peer_data(p));
         }
-        app_->set_peers(model);
+        global().set_peers(model);
     });
 }
 
 void MainWindow::OnLogin(Peer me)
 {
-    slint::invoke_from_event_loop([this, me] { app_->set_signed(me.online); });
+    slint::invoke_from_event_loop(
+        [this, me] { global().set_online(me.online); });
 }
 
 void MainWindow::OnLogout(Peer me)
 {
-    slint::invoke_from_event_loop([this, me] { app_->set_signed(me.online); });
+    slint::invoke_from_event_loop(
+        [this, me] { global().set_online(me.online); });
 }

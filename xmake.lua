@@ -10,6 +10,7 @@ local webrtc_src_dir = path.join(webrtc_dir, 'src')
 local webrtc_out_dir = path.join('out', '$(os)' .. '-' .. '$(mode)')
 local webrtc_obj_dir = path.join(webrtc_src_dir, webrtc_out_dir, 'obj')
 local slint_dir = './third_party/Slint-cpp-1.0.2-Linux-x86_64'
+local slint_compiler = is_os('linux') and 'slint_compiler' or 'slint_compiler.exe'
 
 add_requireconfs("*", { configs = { shared = false, system = true, debug = true }, shared = false })
 
@@ -94,7 +95,7 @@ target('dezk', function()
     add_defines('SLINT_FEATURE_EXPERIMENTAL')
 
     add_includedirs('src', webrtc_src_dir, slint_dir .. '/include')
-    add_files('src/**.cc', 'src/**.c')
+    add_files('src/**.cc')
     remove_files('src/server/**.cc')
     remove_files('src/**_test.cc')
 
@@ -114,6 +115,9 @@ target('dezk', function()
     add_vcpkg('avcodec', 'avutil', 'avformat', 'libyuv')
     add_vcpkg('freetype', 'zlib', 'liblzma', 'brotli', 'libpng', 'bzip2')
 
+    before_build(function ()
+        os.exec('%s src/ui/app.slint > src/ui/app.slint.h', slint_compiler)
+    end)
     if is_os('linux') then
         after_build(function(target)
             os.exec('rsync %s notebook:dezk', target:targetfile())

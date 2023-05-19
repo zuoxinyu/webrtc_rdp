@@ -10,19 +10,21 @@ export global ClientState {
     callback exit;
     callback connect(string);
     callback disconnect();
-    callback open-stat();
-    callback open-chat();
 
-    in-out property<string>   user;
-    in-out property<string>   host;
-    in-out property<string>   port;
-    in-out property<bool>     enable-video;
-    in-out property<bool>     enable-voice;
+    in property<bool>         online: true;
+    in-out property<string>   user: "Morisa";
+    in-out property<string>   host: "10.10.10.133";
+    in-out property<string>   port: "8888";
+    in-out property<bool>     enable-video: false;
+    in-out property<bool>     enable-voice: false;
     in-out property<bool>     calling: false;
     in-out property<PeerData> current;
     in-out property<PeerData> me: {name: "Morisa", id: "0", online: true};
-    in property<bool>         signed: false;
-    in property<[PeerData]>   peers;
+    in property<[PeerData]>   peers: [
+        {name: "Sakuya", id: "1", online: true},
+        {name: "Alice",  id: "2", online: true},
+        {name: "Yoyoko", id: "3", online: true},
+    ];
 
     in-out property<bool> show-chat: false;
     in-out property<bool> show-stat: false;

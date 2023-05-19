@@ -1,10 +1,5 @@
-#include "SDL2/SDL_video.h"
 #include "main_window.hh"
 #include <slint.h>
-extern "C" {
-#include "ui/microui.h"
-#include "ui/renderer.h"
-}
 
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_hints.h>
