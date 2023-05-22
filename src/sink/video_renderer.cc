@@ -4,6 +4,7 @@
 #include "sdl_renderer.hh"
 
 #include <cstdio>
+#include <filesystem>
 #include <stdexcept>
 
 #include <GL/glew.h>
@@ -33,7 +34,11 @@ VideoRenderer::VideoRenderer(Config conf) : conf_(std::move(conf))
                                conf_.height, flags);
 }
 
-VideoRenderer::~VideoRenderer() { SDL_DestroyWindow(window_); }
+VideoRenderer::~VideoRenderer()
+{
+    Stop();
+    SDL_DestroyWindow(window_);
+}
 
 void VideoRenderer::Start()
 {
@@ -45,6 +50,7 @@ void VideoRenderer::Stop()
 {
     running_ = false;
     SDL_HideWindow(window_);
+    dump_frame(last_frame_, 0);
 }
 
 /*
@@ -67,7 +73,7 @@ void VideoRenderer::OnFrame(const webrtc::VideoFrame &frame)
 {
     static int once = 0;
     if (conf_.dump && once < 1200 && once % 60 == 0) {
-        dump_frame(frame, once);
+        dump_frame(frame.video_frame_buffer(), once);
     }
     once++;
 
@@ -94,32 +100,19 @@ void VideoRenderer::update_frame()
     auto yuv = scaled->GetI420();
     if (yuv) {
         update_textures(yuv->DataY(), yuv->DataU(), yuv->DataV());
+        last_frame_ = frame;
     }
 }
 
-void VideoRenderer::dump_frame(const webrtc::VideoFrame &frame, int id)
+// TODO: encode as jpeg?
+void VideoRenderer::dump_frame(FramePtr frame, int id)
 {
-    auto buf = frame.video_frame_buffer();
-    auto yuv = buf->GetI420();
-    char name[20] = {0};
-    sprintf(name, "frame-%02d.yuv", id);
-    ::FILE *f = ::fopen(name, "wb+");
+    auto yuv = frame->GetI420();
+    std::string name = fmt::format("frame-{:2}.yuv", id);
+    ::FILE *f = ::fopen(name.c_str(), "wb+");
     fwrite(yuv->DataY(), 1, yuv->StrideY() * yuv->height(), f);
     fwrite(yuv->DataU(), 1, yuv->StrideU() * yuv->height() / 2, f);
     fwrite(yuv->DataV(), 1, yuv->StrideV() * yuv->height() / 2, f);
     fflush(f);
     fclose(f);
-
-    logger::debug("get frame: ["
-                  " id={}"
-                  " size={}"
-                  " width={}"
-                  " height={}"
-                  " timestamp={}"
-                  " ntp time={}"
-                  " render time={}"
-                  " ]",
-                  frame.id(), frame.size(), frame.width(), frame.height(),
-                  frame.timestamp(), frame.ntp_time_ms(),
-                  frame.render_time_ms());
 }

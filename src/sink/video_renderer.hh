@@ -22,8 +22,8 @@ struct VideoRenderer : public VideoSink {
         bool hide = true;
     };
 
-    using FrameQueue =
-        boost::sync_queue<rtc::scoped_refptr<webrtc::VideoFrameBuffer>>;
+    using FramePtr = rtc::scoped_refptr<webrtc::VideoFrameBuffer>;
+    using FrameQueue = boost::sync_queue<FramePtr>;
 
   public:
     static rtc::scoped_refptr<VideoRenderer> Create(Config conf);
@@ -46,7 +46,7 @@ struct VideoRenderer : public VideoSink {
     explicit VideoRenderer(Config conf);
 
   private:
-    void dump_frame(const webrtc::VideoFrame &frame, int id = 0);
+    void dump_frame(FramePtr frame, int id = 0);
 
   protected:
     // resources
@@ -56,5 +56,6 @@ struct VideoRenderer : public VideoSink {
     // states
     bool running_ = false;
 
+    FramePtr last_frame_;
     FrameQueue frame_queue_;
 };

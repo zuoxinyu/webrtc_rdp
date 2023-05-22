@@ -1,50 +1,59 @@
-import {Button, HorizontalBox, VerticalBox} from "std-widgets.slint";
+import {Button, HorizontalBox, VerticalBox, GridBox} from "std-widgets.slint";
 import {ClientState, PeerData} from "global.slint";
 
 component PeerItem {
     in property<PeerData> peer;
     out property<bool>    connected: false;
 
-    height: 30px;
     touch := TouchArea {}
-    HorizontalBox {
-        Text {
-            text: peer.name;
-            width: 30%; 
+
+    VerticalLayout {
+        spacing: 4px;
+
+        Rectangle {
+            width: 180px;
+            height: 120px;
+            border-color: black;
+            border-width: 1px;
         }
 
-        Text {
-            text: peer.id;
-            width: 10%;
-        }
+        HorizontalLayout {
+            height: 40px;
+            alignment: space-between;
+            Text {
+                vertical-alignment: center;
+                text: peer.name;
+                width: 30%;
+            }
 
-        Button {
-            text: "connect";
-            clicked => {
-                if (!ClientState.calling) {
-                    ClientState.connect(peer.id);
-                    ClientState.current = peer;
-                    ClientState.calling = true;
-                    self.text = "disconnect";
-                } else {
-                    ClientState.disconnect();
-                    ClientState.calling = false;
-                    self.text = "connect";
+            Button {
+                text: "o";
+                clicked => {
+                    if (!ClientState.calling) {
+                        ClientState.connect(peer.id);
+                        ClientState.current = peer;
+                        ClientState.calling = true;
+                        self.text = "x";
+                    } else {
+                        ClientState.disconnect();
+                        ClientState.calling = false;
+                        self.text = "o";
+                    }
                 }
             }
-        }
 
-        Button {
-            text: "chat";
-            clicked => {
-                ClientState.show-chat = !ClientState.show-chat;
+            Button {
+                text: "c";
+                clicked => {
+                    ClientState.show-chat = !ClientState.show-chat;
+                }
             }
-        }
 
-        Button {
-            text: "stats";
-            clicked => {
-                ClientState.show-stat = true;
+            Button {
+                text: "s";
+                clicked => {
+                    ClientState.show-stat = true;
+                }
             }
         }
     }
@@ -53,16 +62,11 @@ component PeerItem {
 export component PeerList {
     in property <[PeerData]> peers <=> ClientState.peers;
 
-    VerticalBox {
-        HorizontalBox {
-            height: 28px;
-            Text { text: "Name"; width: 30%; }
-            Text { text: "ID"; width: 10%; }
-        }
-        VerticalBox {
-            for p in peers: PeerItem {
-                peer: p;
-            }
+    Rectangle {
+        for p[idx] in peers: PeerItem {
+            x: Math.mod(idx, Math.floor((parent.width - 20px) / (self.width + 20px))) * (self.width + 20px) + 20px;
+            y: Math.floor(idx / Math.floor((parent.width - 20px) / (self.width + 20px))) * (self.height + 20px) + 20px;
+            peer: p;
         }
     }
 }

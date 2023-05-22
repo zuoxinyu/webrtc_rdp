@@ -193,7 +193,16 @@ void MainWindow::run()
 
     Trigger::on({SDLK_LCTRL, SDLK_LSHIFT, SDLK_LALT, SDLK_q}, toggle_grab);
     slint::Timer stats_timer(std::chrono::seconds(5), update_stats);
+
+    // slint doesn't support an API like `Poll` yet, use timer instead
+#ifdef __linux__
     slint::Timer poll_timer(std::chrono::milliseconds(0), poll);
+#endif
+#ifdef _WIN32
+    // on windows the timer can not be 0 otherwise a `recursion in timer`
+    // error would be thrown
+    slint::Timer poll_timer(std::chrono::milliseconds(10), poll);
+#endif
     auto work = boost::asio::make_work_guard(ioctx_);
 
     slint::run_event_loop();

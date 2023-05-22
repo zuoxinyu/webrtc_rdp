@@ -9,8 +9,8 @@ local webrtc_branch = 'm113 refs/remotes/branch-heads/5672'
 local webrtc_src_dir = path.join(webrtc_dir, 'src')
 local webrtc_out_dir = path.join('out', '$(os)' .. '-' .. '$(mode)')
 local webrtc_obj_dir = path.join(webrtc_src_dir, webrtc_out_dir, 'obj')
-local slint_dir = './third_party/Slint-cpp-1.0.2-Linux-x86_64'
-local slint_compiler = is_os('linux') and 'slint_compiler' or 'slint_compiler.exe'
+local slint_dir = is_os('linux') and './third_party/Slint-cpp-1.0.2-Linux-x86_64' or 'D:/DevEnv/Libs/Slint-cpp'
+local slint_compiler = is_os('linux') and 'slint_compiler' or path.join(slint_dir, 'bin', 'slint-compiler.exe')
 
 add_requireconfs("*", { configs = { shared = false, system = true, debug = true }, shared = false })
 
@@ -94,13 +94,13 @@ target('dezk', function()
     add_cxxflags('-Wno-deprecated-declarations')
     add_defines('SLINT_FEATURE_EXPERIMENTAL')
 
-    add_includedirs('src', webrtc_src_dir, slint_dir .. '/include')
+    add_includedirs('src', webrtc_src_dir, slint_dir .. '/include/slint')
     add_files('src/**.cc')
     remove_files('src/server/**.cc')
     remove_files('src/**_test.cc')
 
     add_linkdirs(webrtc_obj_dir, slint_dir .. '/lib')
-    add_links('webrtc', 'slint_cpp')
+    add_links('webrtc', is_os('linux') and 'slint_cpp' or 'slint_cpp.dll')
 
     if is_os('linux') then
         linux_options()
@@ -116,7 +116,7 @@ target('dezk', function()
     add_vcpkg('freetype', 'zlib', 'liblzma', 'brotli', 'libpng', 'bzip2')
 
     before_build(function ()
-        os.exec('%s src/ui/app.slint > src/ui/app.slint.h', slint_compiler)
+        os.exec('%s src/ui/app.slint -o src/ui/app.slint.h', slint_compiler)
     end)
     if is_os('linux') then
         after_build(function(target)
