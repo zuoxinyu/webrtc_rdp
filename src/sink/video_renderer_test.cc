@@ -1,8 +1,6 @@
 #include "video_renderer.hh"
 
-#include <chrono>
 #include <cstdio>
-#include <filesystem>
 #include <thread>
 
 #include "api/video/i420_buffer.h"

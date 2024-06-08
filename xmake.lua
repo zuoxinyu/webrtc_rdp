@@ -9,8 +9,9 @@ local webrtc_branch = 'm113 refs/remotes/branch-heads/5672'
 local webrtc_src_dir = path.join(webrtc_dir, 'src')
 local webrtc_out_dir = path.join('out', '$(os)' .. '-' .. '$(mode)')
 local webrtc_obj_dir = path.join(webrtc_src_dir, webrtc_out_dir, 'obj')
-local slint_dir = is_os('linux') and './third_party/Slint-cpp-1.0.2-Linux-x86_64' or 'D:/DevEnv/Libs/Slint-cpp'
-local slint_compiler = is_os('linux') and 'slint_compiler' or path.join(slint_dir, 'bin', 'slint-compiler.exe')
+local slint_dir = is_os('linux') and './third_party/Slint-cpp-1.2.2-Linux-x86_64' or 'D:/DevEnv/Libs/Slint-cpp'
+local slint_compiler = path.join(slint_dir, 'bin',
+    is_os('linux') and 'slint-compiler' or is_os('windows') and 'slint_compiler.exe')
 
 add_requireconfs("*", { configs = { shared = false, system = true, debug = true }, shared = false })
 
@@ -20,6 +21,14 @@ local function require_vcpkg(pkg, opts)
         o[k] = v
     end
     add_requires('vcpkg::' .. pkg, o)
+end
+
+
+local function add_vcpkg(...)
+    local args = { ... }
+    for _, v in ipairs(args) do
+        add_packages(v)
+    end
 end
 
 require_vcpkg('boost-asio')
@@ -80,13 +89,6 @@ local function linux_options()
     add_links('rt', 'drm')
 end
 
-local function add_vcpkg(...)
-    local args = { ... }
-    for _, v in ipairs(args) do
-        add_packages(v)
-    end
-end
-
 target('dezk', function()
     set_default(true)
     set_kind('binary')
@@ -99,8 +101,10 @@ target('dezk', function()
     remove_files('src/server/**.cc')
     remove_files('src/**_test.cc')
 
-    add_linkdirs(webrtc_obj_dir, slint_dir .. '/lib')
-    add_links('webrtc', is_os('linux') and 'slint_cpp' or 'slint_cpp.dll')
+    add_linkdirs(webrtc_obj_dir)
+    add_linkdirs(path.join(slint_dir, 'lib'))
+    add_links('webrtc')
+    add_links(is_os('linux') and 'slint_cpp' or 'slint_cpp.dll')
 
     if is_os('linux') then
         linux_options()
@@ -115,14 +119,15 @@ target('dezk', function()
     add_vcpkg('avcodec', 'avutil', 'avformat', 'libyuv')
     add_vcpkg('freetype', 'zlib', 'liblzma', 'brotli', 'libpng', 'bzip2')
 
-    before_build(function ()
+    before_build(function()
+        os.setenv('SLINT_STYLE', 'fluent')
         os.exec('%s src/ui/app.slint -o src/ui/app.slint.h', slint_compiler)
     end)
-    if is_os('linux') then
-        after_build(function(target)
-            os.exec('rsync %s notebook:dezk', target:targetfile())
-        end)
-    end
+    after_build(function(target)
+        -- if is_os('linux') and false then
+        --     -- os.exec('rsync %s notebook:dezk', target:targetfile())
+        -- end
+    end)
 end)
 
 target('signal_server', function()
@@ -142,11 +147,11 @@ target('signal_server', function()
     end
     add_packages('boost-asio', 'boost-url', 'boost-beast', 'nlohmann-json')
 
-    if is_os('linux') then
-        after_build(function(target)
-            os.exec('rsync %s notebook:signal_server', target:targetfile())
-        end)
-    end
+    after_build(function(target)
+        -- if is_os('linux') then
+        --     -- os.exec('rsync %s notebook:signal_server', target:targetfile())
+        -- end
+    end)
 end)
 
 if get_config('buildtest') == 1 then
@@ -251,7 +256,7 @@ task('fetch-slint', function()
     on_run(function()
         os.cd('third_party')
         os.exec(
-            'wget -c https://github.com/slint-ui/slint/releases/download/v1.0.2/Slint-cpp-1.0.2-Linux-x86_64.tar.gz -O - | tar -zx')
+            'wget -c https://github.com/slint-ui/slint/releases/download/v1.2.2/Slint-cpp-1.2.2-Linux-x86_64.tar.gz -O - | tar -zx')
     end)
 
     set_menu {

@@ -193,7 +193,7 @@ auto EventExecutor::execute(EventExecutor::Event ev) -> bool
     case SDL_EventType::SDL_KEYUP:
         seq = translate(e.key);
         // non mod keys only trigger keyup event unless on long pressing
-        xdo_send_keysequence_window_up(xdo_, CURRENTWINDOW, seq.c_str(),
+        xdo_send_keysequence_window(xdo_, CURRENTWINDOW, seq.c_str(),
                                        kDelayMicros);
         break;
     default:

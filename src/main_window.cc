@@ -3,8 +3,6 @@
 #include "ui/sdl_trigger.hh"
 
 #include <chrono>
-#include <functional>
-#include <thread>
 
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_keyboard.h>
@@ -12,7 +10,6 @@
 #include <absl/flags/flag.h>
 #include <boost/asio.hpp>
 #include <slint.h>
-#include <slint_platform.h>
 #include <slint_sharedvector.h>
 
 static const VideoRenderer::Config camwin_opts = {.name = "camera video",
@@ -196,7 +193,7 @@ void MainWindow::run()
 
     // slint doesn't support an API like `Poll` yet, use timer instead
 #ifdef __linux__
-    slint::Timer poll_timer(std::chrono::milliseconds(0), poll);
+    slint::Timer poll_timer(std::chrono::milliseconds(10), poll);
 #endif
 #ifdef _WIN32
     // on windows the timer can not be 0 otherwise a `recursion in timer`
@@ -241,7 +238,6 @@ static PeerData to_peer_data(const Peer &p)
         slint::SharedString(p.name),
         slint::SharedString(p.id),
         p.online,
-
     };
 }
 

@@ -7,10 +7,8 @@
 #include "api/create_peerconnection_factory.h"
 #include "api/media_stream_interface.h"
 #include "api/peer_connection_interface.h"
-#include "api/video/video_sink_interface.h"
 #include "api/video_codecs/builtin_video_decoder_factory.h"
 #include "api/video_codecs/builtin_video_encoder_factory.h"
-#include "api/video_codecs/video_encoder_factory.h"
 
 static const std::string kAudioLabel = "x-remote-track-audio";
 static const std::string kDataChanId = "x-remote-chan-input";

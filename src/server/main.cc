@@ -2,7 +2,6 @@
 
 #include <boost/asio.hpp>
 #include <boost/asio/co_spawn.hpp>
-#include <iostream>
 
 int main(int argc, char *argv[])
 {

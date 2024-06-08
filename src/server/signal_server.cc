@@ -1,9 +1,6 @@
 #include "signal_server.hh"
 #include "logger.hh"
 
-#include <algorithm>
-#include <chrono>
-#include <iostream>
 #include <memory>
 #include <set>
 #include <utility>
@@ -289,5 +286,5 @@ auto SignalServer::peers_json() const -> json
     for (auto &it : peers_) {
         peers.push_back(it.second.peer);
     }
-    return json(peers);
+    return peers;
 }

@@ -1,5 +1,8 @@
 #include "main_window.hh"
 #include <slint.h>
+#ifdef __linux__
+#include <unistd.h>
+#endif
 
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_hints.h>
@@ -33,6 +36,13 @@ int main(int argc, char *argv[])
     SDL_SetHint(SDL_HINT_GRAB_KEYBOARD, "1");
     SDL_SetHint(SDL_HINT_ALLOW_ALT_TAB_WHILE_GRABBED, "1");
     SDL_SetHint(SDL_HINT_WINDOWS_NO_CLOSE_ON_ALT_F4, "1");
+
+    struct sigaction sigint_handler;
+    sigint_handler.sa_handler = [](int) { slint::quit_event_loop(); };
+    sigint_handler.sa_flags = 0;
+    sigemptyset(&sigint_handler.sa_mask);
+
+    sigaction(SIGINT, &sigint_handler, nullptr);
 
     MainWindow wnd(argc, argv);
     wnd.run();

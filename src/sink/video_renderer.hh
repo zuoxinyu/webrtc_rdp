@@ -2,14 +2,12 @@
 
 #include "video_sink.hh"
 
-// #include <queue>
 #include <boost/thread/sync_queue.hpp>
 
 #include <GL/glew.h>
 #include <SDL2/SDL.h>
 
 #include "api/video/video_frame.h"
-#include "modules/desktop_capture/desktop_capture_types.h"
 
 struct VideoRenderer : public VideoSink {
   public:
