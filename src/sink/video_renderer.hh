@@ -5,7 +5,6 @@
 // #include <queue>
 #include <boost/thread/sync_queue.hpp>
 
-#include <GL/glew.h>
 #include <SDL2/SDL.h>
 
 #include "api/video/video_frame.h"
@@ -26,7 +25,7 @@ struct VideoRenderer : public VideoSink {
         boost::sync_queue<rtc::scoped_refptr<webrtc::VideoFrameBuffer>>;
 
   public:
-    static rtc::scoped_refptr<VideoRenderer> Create(Config conf);
+    static webrtc::scoped_refptr<VideoRenderer> Create(Config conf);
     ~VideoRenderer() override;
     SDL_Window *get_window() const { return window_; }
     /* webrtc::WindowId get_native_window_handle() const; */

@@ -1,4 +1,5 @@
 #include "peer_client.hh"
+#include "logger.hh"
 
 #include <utility>
 
@@ -10,7 +11,9 @@
 #include "api/video/video_sink_interface.h"
 #include "api/video_codecs/builtin_video_decoder_factory.h"
 #include "api/video_codecs/builtin_video_encoder_factory.h"
-#include "api/video_codecs/video_encoder_factory.h"
+#include "api/audio_codecs/audio_encoder_factory_template.h"
+#include "api/audio_codecs/audio_decoder_factory_template.h"
+#include "api/video_codecs/video_encoder_factory_template.h"
 
 static const std::string kAudioLabel = "x-remote-track-audio";
 static const std::string kDataChanId = "x-remote-chan-input";
@@ -52,9 +55,9 @@ set_encoding_params(rtc::scoped_refptr<webrtc::RtpSenderInterface> &&sender)
 
 struct SetLocalSDPCallback
     : public webrtc::SetLocalDescriptionObserverInterface {
-    static rtc::scoped_refptr<SetLocalSDPCallback> Create(PeerClient *that)
+    static webrtc::scoped_refptr<SetLocalSDPCallback> Create(PeerClient *that)
     {
-        return rtc::make_ref_counted<SetLocalSDPCallback>(that);
+        return  webrtc::make_ref_counted<SetLocalSDPCallback>(that);
     }
     void OnSetLocalDescriptionComplete(webrtc::RTCError error) override
     {
@@ -82,9 +85,9 @@ struct SetLocalSDPCallback
 
 struct SetRemoteSDPCallback
     : public webrtc::SetRemoteDescriptionObserverInterface {
-    static rtc::scoped_refptr<SetRemoteSDPCallback> Create(PeerClient *that)
+    static  webrtc::scoped_refptr<SetRemoteSDPCallback> Create(PeerClient *that)
     {
-        return rtc::make_ref_counted<SetRemoteSDPCallback>(that);
+        return  webrtc::make_ref_counted<SetRemoteSDPCallback>(that);
     }
     void OnSetRemoteDescriptionComplete(webrtc::RTCError error) override
     {
@@ -429,7 +432,7 @@ void PeerClient::onDisconnect()
 // PeerConnectionObserver impl
 
 void PeerClient::OnTrack(
-    rtc::scoped_refptr<webrtc::RtpTransceiverInterface> transceiver)
+    webrtc::scoped_refptr<webrtc::RtpTransceiverInterface> transceiver)
 {
     auto track = transceiver->receiver()->track().release();
     logger::debug("OnTrack: stream_id[0]: {} track->id: {}",
@@ -457,7 +460,7 @@ void PeerClient::OnTrack(
 }
 
 void PeerClient::OnRemoveTrack(
-    rtc::scoped_refptr<webrtc::RtpReceiverInterface> receiver)
+    webrtc::scoped_refptr<webrtc::RtpReceiverInterface> receiver)
 {
     auto track = receiver->track().release();
     if (track->kind() == webrtc::MediaStreamTrackInterface::kVideoKind) {
@@ -472,7 +475,7 @@ void PeerClient::OnRemoveTrack(
 }
 
 void PeerClient::OnDataChannel(
-    rtc::scoped_refptr<webrtc::DataChannelInterface> data_channel)
+    webrtc::scoped_refptr<webrtc::DataChannelInterface> data_channel)
 {
     logger::debug("new remote channel [id={} proto={}] connected",
                   data_channel->id(), data_channel->protocol());

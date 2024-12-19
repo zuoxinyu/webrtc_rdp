@@ -10,6 +10,7 @@ build/
 .vscode
 .clangd
 third_party
+vcpkg_installed
 libwebrtc/
 compile_commands.json
 vs20*

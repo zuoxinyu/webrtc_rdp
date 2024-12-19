@@ -1,5 +1,6 @@
 #include "main_window.hh"
 #include <slint.h>
+#include "logger.hh"
 
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_hints.h>

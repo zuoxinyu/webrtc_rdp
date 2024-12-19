@@ -1,3 +1,4 @@
+#ifndef __APPLE__
 #pragma once
 #include "video_renderer.hh"
 
@@ -22,3 +23,4 @@ struct OpenGLRenderer : public VideoRenderer {
     GLuint vao, vbo, ebo;
     GLuint program_ = 0;
 };
+#endif

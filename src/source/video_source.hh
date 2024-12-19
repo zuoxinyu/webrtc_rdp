@@ -1,8 +1,9 @@
 #pragma once
 
 #include <list>
-
 #include "api/media_stream_interface.h"
+#include "rtc_base/ref_count.h"
+#include "rtc_base/ref_counter.h"
 
 class VideoTrackSource : public webrtc::VideoTrackSourceInterface
 {
@@ -16,9 +17,9 @@ class VideoTrackSource : public webrtc::VideoTrackSourceInterface
     bool remote() const override { return remote_; }
 
     bool is_screencast() const override { return true; }
-    absl::optional<bool> needs_denoising() const override
+    std::optional<bool> needs_denoising() const override
     {
-        return absl::nullopt;
+        return std::nullopt;
     }
 
     bool GetStats(Stats *stats) override { return false; }
@@ -66,7 +67,7 @@ class VideoTrackSource : public webrtc::VideoTrackSourceInterface
     const bool remote_;
 };
 
-class VideoSource : public rtc::VideoSourceInterface<webrtc::VideoFrame>
+class VideoSource : public rtc::VideoSourceInterface<webrtc::VideoFrame>, public rtc::RefCountInterface
 {
 
   public: // impl VideoSourceInterface
@@ -102,4 +103,15 @@ class VideoSource : public rtc::VideoSourceInterface<webrtc::VideoFrame>
         rtc::VideoSinkWants wants;
     };
     std::vector<SinkPair> sinks_;
+    mutable webrtc::webrtc_impl::RefCounter ref_count_{0};
+
+  public:
+    void AddRef() const override { ref_count_.IncRef(); }
+    rtc::RefCountReleaseStatus Release() const override {
+        const auto status = ref_count_.DecRef();
+        if (status == rtc::RefCountReleaseStatus::kDroppedLastRef) {
+            delete this;
+        }
+        return status;
+    }
 };

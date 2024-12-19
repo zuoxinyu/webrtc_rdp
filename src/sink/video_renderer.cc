@@ -6,8 +6,10 @@
 #include <cstdio>
 #include <stdexcept>
 
+#ifndef __APPLE__
 #include <GL/glew.h>
 #include <SDL2/SDL_opengl.h>
+#endif
 #include <SDL2/SDL_render.h>
 #include <SDL2/SDL_syswm.h>
 #include <SDL2/SDL_version.h>
@@ -15,11 +17,12 @@
 
 rtc::scoped_refptr<VideoRenderer> VideoRenderer::Create(Config conf)
 {
+#ifndef __APPLE__
     if (conf.use_opengl) {
-        return rtc::make_ref_counted<OpenGLRenderer>(std::move(conf));
-    } else {
-        return rtc::make_ref_counted<SDLRenderer>(std::move(conf));
+        return webrtc::make_ref_counted<OpenGLRenderer>(std::move(conf));
     }
+#endif
+    return webrtc::make_ref_counted<SDLRenderer>(std::move(conf));
 }
 
 VideoRenderer::VideoRenderer(Config conf) : conf_(std::move(conf))
@@ -84,7 +87,7 @@ void VideoRenderer::update_frame()
         conf_.hide = false;
     }
 
-    rtc::scoped_refptr<webrtc::VideoFrameBuffer> frame = nullptr;
+    webrtc::scoped_refptr<webrtc::VideoFrameBuffer> frame = nullptr;
     frame_queue_.try_pull(frame);
     if (!frame) {
         return;
@@ -120,6 +123,6 @@ void VideoRenderer::dump_frame(const webrtc::VideoFrame &frame, int id)
                   " render time={}"
                   " ]",
                   frame.id(), frame.size(), frame.width(), frame.height(),
-                  frame.timestamp(), frame.ntp_time_ms(),
+                  frame.timestamp_us(), frame.ntp_time_ms(),
                   frame.render_time_ms());
 }

@@ -1,6 +1,7 @@
 #include "main_window.hh"
 #include "executor/event_executor.hh"
 #include "ui/sdl_trigger.hh"
+#include "logger.hh"
 
 #include <chrono>
 #include <functional>
@@ -12,7 +13,7 @@
 #include <absl/flags/flag.h>
 #include <boost/asio.hpp>
 #include <slint.h>
-#include <slint_platform.h>
+#include <slint-platform.h>
 #include <slint_sharedvector.h>
 
 static const VideoRenderer::Config camwin_opts = {.name = "camera video",

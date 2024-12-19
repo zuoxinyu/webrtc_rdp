@@ -1,25 +1,24 @@
 #pragma once
 
-#include "logger.hh"
+#include "api/make_ref_counted.h"
+#include "api/stats/rtc_stats_collector_callback.h"
 
 #include <nlohmann/json.hpp>
-
-#include "api/peer_connection_interface.h"
 
 class StatsObserver : public webrtc::RTCStatsCollectorCallback
 {
     using json = nlohmann::ordered_json;
 
   public:
-    static rtc::scoped_refptr<StatsObserver> Create(std::string &json)
+    static webrtc::scoped_refptr<StatsObserver> Create(std::string &json)
     {
-        return rtc::make_ref_counted<StatsObserver>(json);
+        return  webrtc::make_ref_counted<StatsObserver>(json);
     }
 
     StatsObserver(std::string &json) : json_(json) {}
 
     void OnStatsDelivered(
-        const rtc::scoped_refptr<const webrtc::RTCStatsReport> &report) override
+        const webrtc::scoped_refptr<const webrtc::RTCStatsReport> &report) override
     {
         auto json = report->ToJson();
 

@@ -22,7 +22,7 @@ struct CameraCapturer : public VideoTrackSource {
     ~CameraCapturer() override = default;
 
     static DeviceList GetDeviceList();
-    static rtc::scoped_refptr<CameraCapturer> Create(Config conf);
+    static webrtc::scoped_refptr<CameraCapturer> Create(Config conf);
 
   public:
     rtc::VideoSourceInterface<webrtc::VideoFrame> *source() override

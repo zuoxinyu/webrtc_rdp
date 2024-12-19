@@ -45,5 +45,5 @@ class FFMPEGDecoder : public webrtc::VideoDecoder
     AVCodecParserContext *parser_ = nullptr;
     AVFrame *frame_ = nullptr;
     AVPacket *packet_ = nullptr;
-    rtc::scoped_refptr<webrtc::I420Buffer> buffer_ = nullptr;
+    webrtc::scoped_refptr<webrtc::I420Buffer> buffer_ = nullptr;
 };

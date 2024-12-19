@@ -1,0 +1,39 @@
+{
+    "name": "webrtc-rdp",
+    "dependencies": [
+        {
+            "name": "boost-asio",
+            "version>=": "1.86.0"
+        },
+        {
+            "name": "boost-beast",
+            "version>=": "1.86.0"
+        },
+        {
+            "name": "boost-url",
+            "version>=": "1.86.0"
+        },
+        {
+            "name": "boost-thread",
+            "version>=": "1.86.0"
+        },
+        {
+            "name": "ffmpeg",
+            "version>=": "5.1.2",
+            "features": [
+                "avcodec",
+                "avdevice",
+                "avformat",
+                "avresample"
+            ]
+        },
+        "fmt",
+        "spdlog",
+        "nlohmann-json",
+        "abseil",
+        "sdl2",
+        "sdl2-ttf",
+        "libyuv",
+        "freetype"
+    ]
+}

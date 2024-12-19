@@ -21,7 +21,7 @@ struct FakeCapturer : public VideoTrackSource {
     ~FakeCapturer() override = default;
 
     static size_t GetDeviceNum();
-    static rtc::scoped_refptr<FakeCapturer> Create(Config conf);
+    static webrtc::scoped_refptr<FakeCapturer> Create(Config conf);
 
   public:
     rtc::VideoSourceInterface<webrtc::VideoFrame> *source() override

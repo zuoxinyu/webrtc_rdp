@@ -32,7 +32,7 @@ component MenuItem inherits Rectangle {
     }
 }
 
-export component MenuBar inherits Rectangle {
+export component MenuBar inherits Window {
     out property<int> active: 0;
     in  property<[{name: string}]> items;
 

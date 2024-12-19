@@ -22,7 +22,7 @@ struct ScreenCapturer : public VideoTrackSource {
     ScreenCapturer(Config conf);
     ~ScreenCapturer() override;
 
-    static rtc::scoped_refptr<ScreenCapturer> Create(Config conf);
+    static webrtc::scoped_refptr<ScreenCapturer> Create(Config conf);
     static std::array<int, 2> GetScreenSize();
 
     void set_exlude_window(webrtc::WindowId id)

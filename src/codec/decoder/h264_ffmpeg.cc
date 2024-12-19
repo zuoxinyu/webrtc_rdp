@@ -13,7 +13,7 @@ extern "C" {
 #include "modules/video_coding/include/video_error_codes.h"
 #include "rtc_base/time_utils.h"
 
-#ifdef _MSC_VER 
+#ifdef _MSC_VER
 #undef av_err2str
 #define av_err2str(r) (r)
 #endif
@@ -114,7 +114,7 @@ int FFMPEGDecoder::do_decode(const webrtc::EncodedImage &image,
         webrtc::VideoFrame frame(buffer_, webrtc::kVideoRotation_0,
                                  render_time_ms *
                                      rtc::kNumMicrosecsPerMillisec);
-        frame.set_timestamp(image.Timestamp());
+        frame.set_timestamp_us(image.capture_time_ms_ * 1000);
         frame.set_ntp_time_ms(image.NtpTimeMs());
 
         callback_->Decoded(frame);

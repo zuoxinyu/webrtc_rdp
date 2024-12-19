@@ -110,14 +110,14 @@ int FFMPEGEncoder::InitEncode(const webrtc::VideoCodec *codec_settings,
     avctx_->gop_size = codec_settings->H264().keyFrameInterval;
     avctx_->max_b_frames = 0;
     avctx_->bit_rate =
-        200 * 1000 * 1000;       // codec_settings->startBitrate * 1000;
+        200 * 1000 * 1000; // codec_settings->startBitrate * 1000;
     avctx_->rc_max_rate =
-        1000 * 1000 * 1000;      // codec_settings->maxBitrate * 1000;
+        1000 * 1000 * 1000; // codec_settings->maxBitrate * 1000;
     avctx_->rc_min_rate =
         50 * 1000 * 1000;        // codec_settings->minBitrate * 1000;
     avctx_->global_quality = 10; // 1-100, higher is worse
     avctx_->profile = FF_PROFILE_H264_HIGH;
-    avctx_->level = 51;          // 5.1
+    avctx_->level = 51; // 5.1
 
     int ret;
     if (hwac_) {
@@ -223,7 +223,7 @@ FFMPEGEncoder::Encode(const webrtc::VideoFrame &frame,
         intoEncodedImage(img, packet_, frame);
         webrtc::CodecSpecificInfo info;
         info.codecType = webrtc::kVideoCodecH264;
-        info.codecSpecific.H264.base_layer_sync = false;   //?
+        info.codecSpecific.H264.base_layer_sync = false; //?
         info.codecSpecific.H264.packetization_mode =
             webrtc::H264PacketizationMode::NonInterleaved; //?
         info.codecSpecific.H264.idr_frame =
@@ -287,7 +287,7 @@ int FFMPEGEncoder::intoEncodedImage(webrtc::EncodedImage &image,
     image.capture_time_ms_ = frame.render_time_ms();
     image.rotation_ = frame.rotation();
     image.content_type_ = webrtc::VideoContentType::SCREENSHARE;
-    image.SetTimestamp(frame.timestamp());
+    image.capture_time_ms_ = (frame.timestamp_us() * 1000);
     image.SetColorSpace(frame.color_space());
 
     return 0;

@@ -1,5 +1,6 @@
 #include "fake_capturer.hh"
 
+#include "api/make_ref_counted.h"
 #include "api/video/video_source_interface.h"
 #include "modules/video_capture/video_capture.h"
 #include "modules/video_capture/video_capture_factory.h"
@@ -83,7 +84,7 @@ class FakeCapturerImpl : public VideoSource
 
 rtc::scoped_refptr<FakeCapturer> FakeCapturer::Create(Config conf)
 {
-    return rtc::make_ref_counted<FakeCapturer>(conf);
+    return webrtc::make_ref_counted<FakeCapturer>(conf);
 }
 
 size_t FakeCapturer::GetDeviceNum()

@@ -160,7 +160,8 @@ auto SignalServer::handle_http_session(
     }
 
     // Send a TCP shutdown
-    stream->socket().shutdown(asio::ip::tcp::socket::shutdown_send, ec);
+    std::ignore =
+        stream->socket().shutdown(asio::ip::tcp::socket::shutdown_send, ec);
 
     // At this point the connection is closed gracefully
     co_return;

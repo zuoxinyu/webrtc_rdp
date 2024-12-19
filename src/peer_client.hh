@@ -34,8 +34,8 @@ struct PeerClient : private webrtc::PeerConnectionObserver,
         bool binary;
     };
 
-    using VideoSourcePtr = rtc::scoped_refptr<VideoTrackSource>;
-    using VideoSinkPtr = rtc::scoped_refptr<VideoSink>;
+    using VideoSourcePtr = webrtc::scoped_refptr<VideoTrackSource>;
+    using VideoSinkPtr = webrtc::scoped_refptr<VideoSink>;
     using MessageQueue = std::queue<ChanMessage>;
 
     friend struct SetRemoteSDPCallback;
@@ -89,13 +89,13 @@ struct PeerClient : private webrtc::PeerConnectionObserver,
     void OnIceCandidate(const webrtc::IceCandidateInterface *) override;
     void OnTrack(rtc::scoped_refptr<webrtc::RtpTransceiverInterface>) override;
     void OnRemoveTrack(
-        rtc::scoped_refptr<webrtc::RtpReceiverInterface>) override;
+        webrtc::scoped_refptr<webrtc::RtpReceiverInterface>) override;
     void OnAddStream(
-        rtc::scoped_refptr<webrtc::MediaStreamInterface>) override{};
+        webrtc::scoped_refptr<webrtc::MediaStreamInterface>) override{};
     void OnRemoveStream(
-        rtc::scoped_refptr<webrtc::MediaStreamInterface>) override{};
+        webrtc::scoped_refptr<webrtc::MediaStreamInterface>) override{};
     void OnDataChannel(
-        rtc::scoped_refptr<webrtc::DataChannelInterface>) override;
+        webrtc::scoped_refptr<webrtc::DataChannelInterface>) override;
     void OnIceGatheringChange(
         webrtc::PeerConnectionInterface::IceGatheringState) override;
     void OnIceSelectedCandidatePairChanged(
@@ -117,11 +117,11 @@ struct PeerClient : private webrtc::PeerConnectionObserver,
     // internal resources
     // must before `pc_factory_`, due to destruction order
     std::unique_ptr<rtc::Thread> signaling_thread_ = nullptr;
-    rtc::scoped_refptr<webrtc::PeerConnectionFactoryInterface> pc_factory_ =
+    webrtc::scoped_refptr<webrtc::PeerConnectionFactoryInterface> pc_factory_ =
         nullptr;
     // TODO: multiple pc instances support?
-    rtc::scoped_refptr<webrtc::PeerConnectionInterface> pc_ = nullptr;
-    rtc::scoped_refptr<webrtc::DataChannelInterface> data_chan_ = nullptr;
+    webrtc::scoped_refptr<webrtc::PeerConnectionInterface> pc_ = nullptr;
+    webrtc::scoped_refptr<webrtc::DataChannelInterface> data_chan_ = nullptr;
     std::unique_ptr<MessageQueue> mq_;
 
     // states

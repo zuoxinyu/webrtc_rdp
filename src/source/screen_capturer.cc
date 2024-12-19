@@ -165,8 +165,8 @@ class ScreenCaptureImpl : public VideoSource,
     std::unique_ptr<webrtc::DesktopCapturer> desktop_capturer_;
     std::thread thread_;
     std::atomic<bool> running_ = false;
-    rtc::scoped_refptr<webrtc::I420Buffer> origin_buffer_;
-    rtc::scoped_refptr<webrtc::I420Buffer> scaled_buffer_;
+    webrtc::scoped_refptr<webrtc::I420Buffer> origin_buffer_;
+    webrtc::scoped_refptr<webrtc::I420Buffer> scaled_buffer_;
     ScreenCapturer::Config conf_;
 };
 
@@ -180,7 +180,7 @@ std::array<int, 2> ScreenCapturer::GetScreenSize()
 
 rtc::scoped_refptr<ScreenCapturer> ScreenCapturer::Create(Config conf)
 {
-    return rtc::make_ref_counted<ScreenCapturer>(conf);
+    return webrtc::make_ref_counted<ScreenCapturer>(conf);
 }
 
 ScreenCapturer::ScreenCapturer(Config conf)

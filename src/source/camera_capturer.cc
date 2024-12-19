@@ -42,14 +42,14 @@ class CameraCapturerImpl : public rtc::VideoSourceInterface<webrtc::VideoFrame>
     void stop() { vcm_->StopCapture(); }
 
   private:
-    rtc::scoped_refptr<webrtc::VideoCaptureModule> vcm_;
+    webrtc::scoped_refptr<webrtc::VideoCaptureModule> vcm_;
     bool running_ = false;
     CameraCapturer::Config conf_;
 };
 
 rtc::scoped_refptr<CameraCapturer> CameraCapturer::Create(Config conf)
 {
-    return rtc::make_ref_counted<CameraCapturer>(conf);
+    return  webrtc::make_ref_counted<CameraCapturer>(conf);
 }
 
 CameraCapturer::CameraCapturer(CameraCapturer::Config conf)

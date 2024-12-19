@@ -1,3 +1,5 @@
+#ifndef __APPLE__
+#pragma once
 #include "opengl_renderer.hh"
 #include "logger.hh"
 
@@ -206,3 +208,4 @@ void OpenGLRenderer::update_textures(const void *ydata, const void *udata,
 
     SDL_GL_SwapWindow(window_);
 }
+#endif

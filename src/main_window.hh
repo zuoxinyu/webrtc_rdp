@@ -58,11 +58,11 @@ class MainWindow : public UIObserver
     std::unique_ptr<SignalClient> cc_ = nullptr;
     std::unique_ptr<PeerClient> pc_ = nullptr;
     std::unique_ptr<EventExecutor> ee_ = nullptr;
-    rtc::scoped_refptr<CameraCapturer> camera_video_src_ = nullptr;
-    rtc::scoped_refptr<ScreenCapturer> screen_video_src_ = nullptr;
-    rtc::scoped_refptr<VideoRenderer> camera_renderer_ = nullptr;
-    rtc::scoped_refptr<VideoRenderer> screen_renderer_ = nullptr;
-    rtc::scoped_refptr<StatsObserver> stats_observer_ = nullptr;
+    webrtc::scoped_refptr<CameraCapturer> camera_video_src_ = nullptr;
+    webrtc::scoped_refptr<ScreenCapturer> screen_video_src_ = nullptr;
+    webrtc::scoped_refptr<VideoRenderer> camera_renderer_ = nullptr;
+    webrtc::scoped_refptr<VideoRenderer> screen_renderer_ = nullptr;
+    webrtc::scoped_refptr<StatsObserver> stats_observer_ = nullptr;
 
     // slint ui
     slint::ComponentHandle<App> app_;
