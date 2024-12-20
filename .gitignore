@@ -18,3 +18,4 @@ vsxmake*
 
 # slint generates
 *.slint.h
+*.dylib

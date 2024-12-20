@@ -49,7 +49,7 @@ class CameraCapturerImpl : public rtc::VideoSourceInterface<webrtc::VideoFrame>
 
 rtc::scoped_refptr<CameraCapturer> CameraCapturer::Create(Config conf)
 {
-    return  webrtc::make_ref_counted<CameraCapturer>(conf);
+    return webrtc::make_ref_counted<CameraCapturer>(conf);
 }
 
 CameraCapturer::CameraCapturer(CameraCapturer::Config conf)
@@ -72,11 +72,13 @@ void CameraCapturer::Stop()
 
 CameraCapturer::DeviceList CameraCapturer::GetDeviceList()
 {
+    std::vector<std::pair<std::string, std::string>> devices;
     auto device_info = webrtc::VideoCaptureFactory::CreateDeviceInfo();
+    if (!device_info)
+        return devices;
     char device_name[256];
     char device_uniq[256];
     auto ndev = device_info->NumberOfDevices();
-    std::vector<std::pair<std::string, std::string>> devices;
     for (auto i = 0; i < ndev; i++) {
         device_info->GetDeviceName(i, device_name, 256, device_uniq, 256);
         devices.emplace_back(device_name, device_uniq);

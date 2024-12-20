@@ -1,8 +1,12 @@
 #include "peer_client.hh"
+#include "codec/decoder/factory.hh"
+#include "codec/encoder/factory.hh"
 #include "logger.hh"
 
 #include <utility>
 
+#include "api/audio_codecs/audio_decoder_factory_template.h"
+#include "api/audio_codecs/audio_encoder_factory_template.h"
 #include "api/audio_codecs/builtin_audio_decoder_factory.h"
 #include "api/audio_codecs/builtin_audio_encoder_factory.h"
 #include "api/create_peerconnection_factory.h"
@@ -11,8 +15,6 @@
 #include "api/video/video_sink_interface.h"
 #include "api/video_codecs/builtin_video_decoder_factory.h"
 #include "api/video_codecs/builtin_video_encoder_factory.h"
-#include "api/audio_codecs/audio_encoder_factory_template.h"
-#include "api/audio_codecs/audio_decoder_factory_template.h"
 #include "api/video_codecs/video_encoder_factory_template.h"
 
 static const std::string kAudioLabel = "x-remote-track-audio";
@@ -57,7 +59,7 @@ struct SetLocalSDPCallback
     : public webrtc::SetLocalDescriptionObserverInterface {
     static webrtc::scoped_refptr<SetLocalSDPCallback> Create(PeerClient *that)
     {
-        return  webrtc::make_ref_counted<SetLocalSDPCallback>(that);
+        return webrtc::make_ref_counted<SetLocalSDPCallback>(that);
     }
     void OnSetLocalDescriptionComplete(webrtc::RTCError error) override
     {
@@ -85,9 +87,9 @@ struct SetLocalSDPCallback
 
 struct SetRemoteSDPCallback
     : public webrtc::SetRemoteDescriptionObserverInterface {
-    static  webrtc::scoped_refptr<SetRemoteSDPCallback> Create(PeerClient *that)
+    static webrtc::scoped_refptr<SetRemoteSDPCallback> Create(PeerClient *that)
     {
-        return  webrtc::make_ref_counted<SetRemoteSDPCallback>(that);
+        return webrtc::make_ref_counted<SetRemoteSDPCallback>(that);
     }
     void OnSetRemoteDescriptionComplete(webrtc::RTCError error) override
     {
@@ -116,10 +118,10 @@ PeerClient::PeerClient(Config conf) : conf_(std::move(conf))
         nullptr, nullptr, signaling_thread_.get(), nullptr,
         webrtc::CreateBuiltinAudioEncoderFactory(),
         webrtc::CreateBuiltinAudioDecoderFactory(),
-        webrtc::CreateBuiltinVideoEncoderFactory(),
-        webrtc::CreateBuiltinVideoDecoderFactory(),
-        /* std::make_unique<CustomVideoEncoderFactory>(), // */
-        /* std::make_unique<CustomVideoDecoderFactory>(), // */
+        /*webrtc::CreateBuiltinVideoEncoderFactory(),*/
+        /*webrtc::CreateBuiltinVideoDecoderFactory(),*/
+        std::make_unique<CustomVideoEncoderFactory>(), //
+        std::make_unique<CustomVideoDecoderFactory>(), //
         nullptr, nullptr);
 
     webrtc::PeerConnectionFactoryInterface::Options factory_opts;

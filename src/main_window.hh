@@ -27,6 +27,8 @@ class MainWindow : public UIObserver
     void run();
     void stop();
 
+    void set_init_fn(std::function<void()> fn) { init_fn_ = std::move(fn); }
+
   public:
     void OnLogout(Peer me) override;
     void OnLogin(Peer me) override;
@@ -45,7 +47,7 @@ class MainWindow : public UIObserver
     void post_chat(const std::string &msg);
 
     // misc
-    const ClientState &global() {return app_->global<ClientState>(); };
+    const ClientState &global() { return app_->global<ClientState>(); };
 
   private:
     // properties
@@ -63,6 +65,8 @@ class MainWindow : public UIObserver
     webrtc::scoped_refptr<VideoRenderer> camera_renderer_ = nullptr;
     webrtc::scoped_refptr<VideoRenderer> screen_renderer_ = nullptr;
     webrtc::scoped_refptr<StatsObserver> stats_observer_ = nullptr;
+
+    std::function<void()> init_fn_ = [] {};
 
     // slint ui
     slint::ComponentHandle<App> app_;

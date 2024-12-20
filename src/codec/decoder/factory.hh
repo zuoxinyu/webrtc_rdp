@@ -9,7 +9,8 @@ class CustomVideoDecoderFactory : public webrtc::VideoDecoderFactory
   public:
     ~CustomVideoDecoderFactory() override = default;
     std::unique_ptr<webrtc::VideoDecoder>
-    CreateVideoDecoder(const webrtc::SdpVideoFormat &format);
+    Create(const webrtc::Environment &env,
+           const webrtc::SdpVideoFormat &format) override;
 
     std::vector<webrtc::SdpVideoFormat> GetSupportedFormats() const override;
 

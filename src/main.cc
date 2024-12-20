@@ -1,6 +1,6 @@
+#include "logger.hh"
 #include "main_window.hh"
 #include <slint.h>
-#include "logger.hh"
 
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_hints.h>
@@ -8,7 +8,6 @@
 #include <absl/flags/flag.h>
 #include <absl/flags/parse.h>
 #include <absl/flags/usage.h>
-#include <fmt/format.h>
 
 #include "rtc_base/logging.h"
 
@@ -17,7 +16,7 @@ ABSL_FLAG(bool, debug, false, "enable verbose logging");
 
 int main(int argc, char *argv[])
 {
-    absl::SetProgramUsageMessage(fmt::format("sample usage: {}", argv[0]));
+    absl::SetProgramUsageMessage(std::format("sample usage: {}", argv[0]));
     absl::ParseCommandLine(argc, argv);
 
     rtc::LogMessage::LogToDebug(absl::GetFlag(FLAGS_rtclog) ? rtc::LS_INFO
@@ -26,16 +25,21 @@ int main(int argc, char *argv[])
                                                  : spdlog::level::debug);
     logger::info("Hello dezk");
 
-    if (SDL_Init(SDL_INIT_EVERYTHING) || TTF_Init()) {
-        logger::critical("failed to init SDL or SDL_TTF: {}", SDL_GetError());
-        exit(EXIT_FAILURE);
-    }
-
-    SDL_SetHint(SDL_HINT_GRAB_KEYBOARD, "1");
-    SDL_SetHint(SDL_HINT_ALLOW_ALT_TAB_WHILE_GRABBED, "1");
-    SDL_SetHint(SDL_HINT_WINDOWS_NO_CLOSE_ON_ALT_F4, "1");
-
     MainWindow wnd(argc, argv);
+    // winit requires its event loop start before others (e.g. SDL or Qt
+    // eventloop)
+    wnd.set_init_fn([&]() {
+        if (SDL_Init(SDL_INIT_EVERYTHING) || TTF_Init()) {
+            logger::critical("failed to init SDL or SDL_TTF: {}",
+                             SDL_GetError());
+            exit(EXIT_FAILURE);
+        }
+
+        SDL_SetHint(SDL_HINT_GRAB_KEYBOARD, "1");
+        SDL_SetHint(SDL_HINT_ALLOW_ALT_TAB_WHILE_GRABBED, "1");
+        SDL_SetHint(SDL_HINT_WINDOWS_NO_CLOSE_ON_ALT_F4, "1");
+    });
+
     wnd.run();
     return 0;
 }

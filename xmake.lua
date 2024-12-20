@@ -3,20 +3,25 @@ set_project("webrtc-rdp")
 add_rules("mode.debug", "mode.release")
 set_toolchains("clang")
 set_defaultmode("debug")
+add_rules("plugin.compile_commands.autoupdate")
+
+local vcpkg_dir = path.join(
+    "vcpkg_installed",
+    is_os("windows") and "x64-windows-static" or is_os("macosx") and "arm64-osx" or is_os("linux") and "x64-linux"
+)
 
 local webrtc_dir = "third_party/webrtc"
-local vcpkg_dir = path.join("vcpkg_installed",
-    is_os("windows") and "x64-windows-static" or is_os("macosx") and "arm64-osx" or is_os("linux") and "x64-linux")
 local webrtc_branch = "m132 refs/remotes/branch-heads/6834"
 local webrtc_src_dir = path.join(webrtc_dir, "src")
-local webrtc_out_dir = path.join("out", string.format("$(os)-%s", is_mode("relase") and "release" or "debug"))
+local webrtc_out_dir = path.join("out", string.format("$(os)-%s", is_mode("release") and "release" or "debug"))
 local webrtc_obj_dir = path.join(webrtc_src_dir, webrtc_out_dir, "obj")
+
 local slint_version = "1.9.0"
 local slint_os_infix = is_os("linux") and "Linux-x86_64" or is_os("macosx") and "Darwin-arm64" or "unknown"
-local slint_dir = is_os("windows") and string.format("C:/Program Files/Slint-cpp %s/", slint_version) or
-    string.format("./third_party/Slint-cpp-%s-%s", slint_version, slint_os_infix)
+local slint_dir = is_os("windows") and string.format("C:/Program Files/Slint-cpp %s/", slint_version)
+    or string.format("./third_party/Slint-cpp-%s-%s", slint_version, slint_os_infix)
 
-local slint_compiler = is_os("windows") and "slint-compiler.exe" or "third_party/slint-compiler"
+local slint_compiler = is_os("windows") and "third_party/slint-compiler.exe" or "third_party/slint-compiler"
 
 -- add_requireconfs("*", { configs = { shared = false, system = true, debug = true }, shared = false })
 
@@ -31,33 +36,17 @@ local function require_vcpkg(pkg, version, opts)
     add_requires("vcpkg::" .. pkg .. " " .. version, o)
 end
 
--- require_vcpkg("boost-asio", ">=1.86.0")
--- require_vcpkg("boost-beast", ">=1.86.0")
--- require_vcpkg("boost-url", ">=1.86.0")
--- require_vcpkg("boost-thread", ">=1.86.0")
--- require_vcpkg("fmt", ">=11.0.0")
--- require_vcpkg("spdlog", ">=1.15.0")
--- require_vcpkg("abseil", ">=20240722.0")
--- require_vcpkg("nlohmann-json", ">=3.11.2")
--- require_vcpkg("libyuv", ">=1896")
--- -- glew
--- -- require_vcpkg("glew")
--- -- end glew
--- require_vcpkg("sdl2", ">=2.30.0")
--- require_vcpkg("sdl2-ttf", ">=2.22.0")
--- -- require_vcpkg("freetype")
--- require_vcpkg("bzip2", ">=1.0.8")
--- require_vcpkg("brotli", ">=1.0.9")
--- require_vcpkg("zlib", ">=1.2.12")
--- require_vcpkg("libpng", ">=1.6.38")
--- -- end sdl2-ttf
--- -- ffmpeg
--- -- require_vcpkg("ffmpeg[avcodec]", { alias = "avcodec" })
--- -- require_vcpkg("ffmpeg[avutil]", { alias = "avutil" })
--- -- require_vcpkg("ffmpeg[avformat]", { alias = "avformat" })
--- -- require_vcpkg("liblzma")
--- add_requires("vcpkg::ffmpeg >=5.1.2", { configs = { features = { "avcodec", "avutil", "avformat", "avdevice" } } })
--- end ffmpeg
+add_requires("boost", { configs = { header_only = true, all = true } })
+add_packages("fmt")
+add_requires("abseil")
+add_requires("spdlog")
+add_requires("nlohmann_json")
+add_requires("libyuv")
+add_requires("glew")
+add_requires("libsdl")
+add_requires("libsdl_ttf")
+add_requires("libpng")
+add_requires("ffmpeg")
 
 if is_os("linux") then
     add_requires("system::xdo", { alias = "xdo" })
@@ -144,13 +133,6 @@ local function dawrin_options()
     )
 end
 
-local function add_vcpkg(...)
-    local args = { ... }
-    for _, v in ipairs(args) do
-        add_packages(v)
-    end
-end
-
 target("dezk", function()
     set_default(true)
     set_kind("binary")
@@ -158,137 +140,40 @@ target("dezk", function()
     add_cxxflags("-Wno-deprecated-declarations")
     add_defines("SLINT_FEATURE_EXPERIMENTAL")
 
-    add_includedirs("src", vcpkg_dir .. "/include")
+    add_includedirs("src")
     add_includedirs(webrtc_src_dir, slint_dir .. "/include/slint")
-    add_linkdirs(vcpkg_dir .. "/lib")
+    -- add_includedirs(vcpkg_dir .. "/include")
+    -- add_linkdirs(vcpkg_dir .. "/lib")
     add_linkdirs(webrtc_obj_dir, slint_dir .. "/lib")
     add_files("src/**.cc")
     remove_files("src/server/**.cc")
     remove_files("src/**_test.cc")
 
-
+    add_rpathdirs(slint_dir .. "/lib")
     if is_os("linux") then
         linux_options()
         add_packages("xdo")
     end
     if is_os("windows") then
         windows_options()
-        add_vcpkg("x264", "opengl")
+        add_packages("x264", "opengl")
     end
     if is_os("macosx") then
         dawrin_options()
     end
-    -- add_vcpkg("boost-url", "boost-asio", "boost-beast", "spdlog", "abseil", "nlohmann-json")
-    -- add_vcpkg("sdl2", "sdl2-ttf", "glew")
-    -- add_vcpkg("avcodec", "avutil", "avformat", "libyuv")
-    -- add_vcpkg("freetype", "zlib", "liblzma", "brotli", "libpng", "bzip2")
-    --
     add_links("webrtc", "slint_cpp")
-    add_links("avcodec", "avutil", "avformat", "avdevice", "avfilter", "swresample", "swscale")
-    add_links("fmt", "bz2", "png", "spdlog", "yuv", "z", "brotlicommon", "brotlidec", "brotlienc", "lzma")
-    add_links(
-        "boost_atomic",
-        "boost_container",
-        "boost_chrono",
-        "boost_context",
-        "boost_coroutine",
-        "boost_thread",
-        "boost_url"
+    add_packages(
+        "fmt",
+        "spdlog",
+        "boost",
+        "abseil",
+        "nlohmann_json",
+        "ffmpeg",
+        "libyuv",
+        "libsdl",
+        "libsdl_ttf",
+        "libpng"
     )
-    add_links("SDL2", "SDL2_ttf", "SDL2main", "freetype")
-    add_links(
-        "absl_bad_any_cast_impl",
-        "absl_bad_optional_access",
-        "absl_bad_variant_access",
-        "absl_base",
-        "absl_city",
-        "absl_civil_time",
-        "absl_cord",
-        "absl_cord_internal",
-        "absl_cordz_functions",
-        "absl_cordz_handle",
-        "absl_cordz_info",
-        "absl_cordz_sample_token",
-        "absl_crc32c",
-        "absl_crc_cord_state",
-        "absl_crc_cpu_detect",
-        "absl_crc_internal",
-        "absl_debugging_internal",
-        "absl_decode_rust_punycode",
-        "absl_demangle_internal",
-        "absl_demangle_rust",
-        "absl_die_if_null",
-        "absl_examine_stack",
-        "absl_exponential_biased",
-        "absl_failure_signal_handler",
-        "absl_flags_commandlineflag",
-        "absl_flags_commandlineflag_internal",
-        "absl_flags_config",
-        "absl_flags_internal",
-        "absl_flags_marshalling",
-        "absl_flags_parse",
-        "absl_flags_private_handle_accessor",
-        "absl_flags_program_name",
-        "absl_flags_reflection",
-        "absl_flags_usage",
-        "absl_flags_usage_internal",
-        "absl_graphcycles_internal",
-        "absl_hash",
-        "absl_hashtablez_sampler",
-        "absl_int128",
-        "absl_kernel_timeout_internal",
-        "absl_leak_check",
-        "absl_log_entry",
-        "absl_log_flags",
-        "absl_log_globals",
-        "absl_log_initialize",
-        "absl_log_internal_check_op",
-        "absl_log_internal_conditions",
-        "absl_log_internal_fnmatch",
-        "absl_log_internal_format",
-        "absl_log_internal_globals",
-        "absl_log_internal_log_sink_set",
-        "absl_log_internal_message",
-        "absl_log_internal_nullguard",
-        "absl_log_internal_proto",
-        "absl_log_severity",
-        "absl_log_sink",
-        "absl_low_level_hash",
-        "absl_malloc_internal",
-        "absl_periodic_sampler",
-        "absl_poison",
-        "absl_random_distributions",
-        "absl_random_internal_distribution_test_util",
-        "absl_random_internal_platform",
-        "absl_random_internal_pool_urbg",
-        "absl_random_internal_randen",
-        "absl_random_internal_randen_hwaes",
-        "absl_random_internal_randen_hwaes_impl",
-        "absl_random_internal_randen_slow",
-        "absl_random_internal_seed_material",
-        "absl_random_seed_gen_exception",
-        "absl_random_seed_sequences",
-        "absl_raw_hash_set",
-        "absl_raw_logging_internal",
-        "absl_scoped_set_env",
-        "absl_spinlock_wait",
-        "absl_stacktrace",
-        "absl_status",
-        "absl_statusor",
-        "absl_str_format_internal",
-        "absl_strerror",
-        "absl_string_view",
-        "absl_strings",
-        "absl_strings_internal",
-        "absl_symbolize",
-        "absl_synchronization",
-        "absl_throw_delegate",
-        "absl_time",
-        "absl_time_zone",
-        "absl_utf8_for_code_point",
-        "absl_vlog_config_internal"
-    )
-
     before_build(function()
         os.exec("%s src/ui/app.slint -o src/ui/app.slint.h", slint_compiler)
     end)
@@ -303,12 +188,8 @@ target("signal_server", function()
     set_kind("binary")
     set_languages("c17", "cxx20")
     add_files("src/server/*.cc")
-    add_includedirs("src", vcpkg_dir .. "/include")
-    add_linkdirs(vcpkg_dir .. "/lib")
-    add_defines("BOOST_ASIO_HAS_STD_COROUTINE", "BOOST_ASIO_HAS_CO_AWAIT", "BOOST_URL_NO_LIB", "FMT_HEADER_ONLY")
-    add_links("fmt", "boost_url", "spdlog")
-    -- add_packages("spdlog", "fmt")
-    -- add_packages("boost-asio", "boost-url", "boost-beast", "nlohmann-json")
+    -- add_includedirs(vcpkg_dir .. "/include")
+    add_includedirs("src")
     if is_os("windows") then
         windows_options()
     end
@@ -326,6 +207,7 @@ target("signal_server", function()
             os.exec("rsync %s notebook:signal_server", target:targetfile())
         end)
     end
+    add_packages("spdlog", "fmt", "boost", "abseil", "nlohmann_json")
 end)
 
 if get_config("buildtest") == 1 then
@@ -354,7 +236,7 @@ if get_config("buildtest") == 1 then
             set_languages("c17", "cxx20")
             add_includedirs("src")
             add_files("src/executor/*.cc")
-            add_vcpkg("sdl2", "spdlog")
+            add_packages("libsdl", "spdlog")
             if is_os("linux") then
                 add_packages("xdo")
             end
@@ -373,9 +255,9 @@ local gn_args = {
     "rtc_include_tests=false",
     "rtc_enable_protobuf=false",
     -- 'ffmpeg_branding=\"Chrome\"',
-    "use_rtti=true",           -- typeinfo
+    "use_rtti=true",        -- typeinfo
     "use_custom_libcxx=false", -- stdlib
-    "use_debug_fission=true",  -- -gsplit-dwarf
+    "use_debug_fission=true", -- -gsplit-dwarf
     -- 'rtc_enable_symbol_export=true',
 }
 
@@ -388,8 +270,8 @@ if is_os("windows") then
         "rtc_include_tests=false",
         "rtc_enable_protobuf=false",
         -- for windows
-        "use_lld=false",           -- linker
-        "use_rtti=true",           -- typeinfo
+        "use_lld=false",     -- linker
+        "use_rtti=true",     -- typeinfo
         "use_custom_libcxx=false", -- stdlib
         "fatal_linker_warnings=false",
         "treat_warnings_as_errors=false",
@@ -436,15 +318,38 @@ task("fetch-slint", function()
         if os.host() == "linux" or os.host() == "macosx" then
             os.exec(
                 string.format(
-                    "wget -c https://github.com/slint-ui/slint/releases/download/v%s/Slint-cpp-%s-%s.tar.gz -O - | tar -zx",
-                    slint_version, slint_version, slint_os_infix)
+                    "wget -c https://github.com/slint-ui/slint/releases/download/v%s/Slint-cpp-%s-%s.tar.gz",
+                    slint_version,
+                    slint_version,
+                    slint_os_infix
+                )
             )
+            os.exec(
+                string.format(
+                    "wget -c https://github.com/slint-ui/slint/releases/download/v%s/slint-compiler-%s.tar.gz",
+                    slint_version,
+                    slint_os_infix
+                )
+            )
+            os.exec(string.format("tar zx Slint-cpp-%s-%s.tar.gz", slint_version, slint_os_infix))
+            os.exec(string.format("tar zx slint-compiler-%s.tar.gz", slint_os_infix))
         elseif os.host() == "windows" then
             os.exec(
                 string.format(
                     "wget https://github.com/slint-ui/slint/releases/download/v%s/Slint-cpp-%s-win64-MSVC.exe",
-                    slint_version, slint_version)
+                    slint_version,
+                    slint_version
+                )
             )
+            -- TODO: install exe
+            os.exec(
+                string.format(
+                    "wget -c https://github.com/slint-ui/slint/releases/download/v%s/slint-compiler-%s.tar.gz",
+                    slint_version,
+                    "Windows"
+                )
+            )
+            os.exec(string.format("tar zx slint-compiler-%s.tar.gz", "Windows"))
         end
     end)
 

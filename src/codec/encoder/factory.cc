@@ -9,8 +9,8 @@ CustomVideoEncoderFactory::GetSupportedFormats() const
 }
 
 std::unique_ptr<webrtc::VideoEncoder>
-CustomVideoEncoderFactory::CreateVideoEncoder(
-    const webrtc::SdpVideoFormat &format)
+CustomVideoEncoderFactory::Create(const webrtc::Environment &env,
+                                  const webrtc::SdpVideoFormat &format)
 {
     return std::make_unique<FFMPEGEncoder>(format);
 }

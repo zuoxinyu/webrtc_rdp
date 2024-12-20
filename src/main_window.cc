@@ -1,19 +1,17 @@
 #include "main_window.hh"
 #include "executor/event_executor.hh"
-#include "ui/sdl_trigger.hh"
 #include "logger.hh"
+#include "ui/sdl_trigger.hh"
 
-#include <chrono>
-#include <functional>
-#include <thread>
+#include <string>
 
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_keyboard.h>
 #include <SDL2/SDL_video.h>
 #include <absl/flags/flag.h>
 #include <boost/asio.hpp>
-#include <slint.h>
 #include <slint-platform.h>
+#include <slint.h>
 #include <slint_sharedvector.h>
 
 static const VideoRenderer::Config camwin_opts = {.name = "camera video",
@@ -194,7 +192,8 @@ void MainWindow::run()
 
     Trigger::on({SDLK_LCTRL, SDLK_LSHIFT, SDLK_LALT, SDLK_q}, toggle_grab);
     slint::Timer stats_timer(std::chrono::seconds(5), update_stats);
-    slint::Timer poll_timer(std::chrono::milliseconds(0), poll);
+    slint::Timer poll_timer(std::chrono::milliseconds(5), poll);
+    slint::Timer::single_shot(std::chrono::milliseconds(100), init_fn_);
     auto work = boost::asio::make_work_guard(ioctx_);
 
     slint::run_event_loop();
