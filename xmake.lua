@@ -1,18 +1,22 @@
 set_project("webrtc-rdp")
 
 add_rules("mode.debug", "mode.release")
--- set_toolchains("clang")
+set_toolchains("clang")
 set_defaultmode("debug")
 
 local webrtc_dir = "third_party/webrtc"
-local vcpkg_dir = "vcpkg_installed"
+local vcpkg_dir = path.join("vcpkg_installed",
+    is_os("windows") and "x64-windows-static" or is_os("macosx") and "arm64-osx" or is_os("linux") and "x64-linux")
 local webrtc_branch = "m132 refs/remotes/branch-heads/6834"
 local webrtc_src_dir = path.join(webrtc_dir, "src")
-local webrtc_out_dir = path.join("out", "$(os)" .. "-" .. "$(mode)")
+local webrtc_out_dir = path.join("out", string.format("$(os)-%s", is_mode("relase") and "release" or "debug"))
 local webrtc_obj_dir = path.join(webrtc_src_dir, webrtc_out_dir, "obj")
-local slint_version = "1.8.0"
-local slint_dir = "./third_party/Slint-cpp-" .. slint_version .. "-Darwin-arm64"
-local slint_compiler = is_os("windows") and "slint_compiler.exe" or "third_party/slint-compiler"
+local slint_version = "1.9.0"
+local slint_os_infix = is_os("linux") and "Linux-x86_64" or is_os("macosx") and "Darwin-arm64" or "unknown"
+local slint_dir = is_os("windows") and string.format("C:/Program Files/Slint-cpp %s/", slint_version) or
+    string.format("./third_party/Slint-cpp-%s-%s", slint_version, slint_os_infix)
+
+local slint_compiler = is_os("windows") and "slint-compiler.exe" or "third_party/slint-compiler"
 
 -- add_requireconfs("*", { configs = { shared = false, system = true, debug = true }, shared = false })
 
@@ -154,9 +158,9 @@ target("dezk", function()
     add_cxxflags("-Wno-deprecated-declarations")
     add_defines("SLINT_FEATURE_EXPERIMENTAL")
 
-    add_includedirs("src", vcpkg_dir .. "/arm64-osx/include")
+    add_includedirs("src", vcpkg_dir .. "/include")
     add_includedirs(webrtc_src_dir, slint_dir .. "/include/slint")
-    add_linkdirs(vcpkg_dir .. "/arm64-osx/lib")
+    add_linkdirs(vcpkg_dir .. "/lib")
     add_linkdirs(webrtc_obj_dir, slint_dir .. "/lib")
     add_files("src/**.cc")
     remove_files("src/server/**.cc")
@@ -299,8 +303,8 @@ target("signal_server", function()
     set_kind("binary")
     set_languages("c17", "cxx20")
     add_files("src/server/*.cc")
-    add_includedirs("src", vcpkg_dir .. "/arm64-osx/include")
-    add_linkdirs(vcpkg_dir .. "/arm64-osx/lib")
+    add_includedirs("src", vcpkg_dir .. "/include")
+    add_linkdirs(vcpkg_dir .. "/lib")
     add_defines("BOOST_ASIO_HAS_STD_COROUTINE", "BOOST_ASIO_HAS_CO_AWAIT", "BOOST_URL_NO_LIB", "FMT_HEADER_ONLY")
     add_links("fmt", "boost_url", "spdlog")
     -- add_packages("spdlog", "fmt")
@@ -329,8 +333,8 @@ if get_config("buildtest") == 1 then
         set_kind("binary")
         set_languages("c17", "cxx20")
         add_files("src/sink/*.cc")
-        add_includedirs("src", vcpkg_dir .. "/arm64-osx/include")
-        add_linkdirs(vcpkg_dir .. "/arm64-osx/lib")
+        add_includedirs("src", vcpkg_dir .. "/include")
+        add_linkdirs(vcpkg_dir .. "/lib")
         add_includedirs(webrtc_src_dir)
         add_packages("spdlog", "fmt", "sdl2", "sdl2-ttf", "glew")
         add_linkdirs(webrtc_obj_dir)
@@ -369,9 +373,9 @@ local gn_args = {
     "rtc_include_tests=false",
     "rtc_enable_protobuf=false",
     -- 'ffmpeg_branding=\"Chrome\"',
-    "use_rtti=true",        -- typeinfo
+    "use_rtti=true",           -- typeinfo
     "use_custom_libcxx=false", -- stdlib
-    "use_debug_fission=true", -- -gsplit-dwarf
+    "use_debug_fission=true",  -- -gsplit-dwarf
     -- 'rtc_enable_symbol_export=true',
 }
 
@@ -384,8 +388,8 @@ if is_os("windows") then
         "rtc_include_tests=false",
         "rtc_enable_protobuf=false",
         -- for windows
-        "use_lld=false",     -- linker
-        "use_rtti=true",     -- typeinfo
+        "use_lld=false",           -- linker
+        "use_rtti=true",           -- typeinfo
         "use_custom_libcxx=false", -- stdlib
         "fatal_linker_warnings=false",
         "treat_warnings_as_errors=false",
@@ -408,6 +412,7 @@ task("fetch-webrtc", function()
     set_menu({
         usage = "xmake fetch-webrtc",
         description = "fetch webrtc source from google",
+        options = {},
     })
 end)
 
@@ -421,28 +426,24 @@ task("build-webrtc", function()
     set_menu({
         usage = "xmake build-webrtc",
         description = "build webrtc source",
+        options = {},
     })
 end)
 
 task("fetch-slint", function()
     on_run(function()
         os.cd("third_party")
-        if os.host() == "linux" then
+        if os.host() == "linux" or os.host() == "macosx" then
             os.exec(
-                "wget -c https://github.com/slint-ui/slint/releases/download/v"
-                .. slint_version
-                .. "/Slint-cpp-"
-                .. slint_version
-                .. "-Linux-x86_64.tar.gz -O - | tar -zx"
+                string.format(
+                    "wget -c https://github.com/slint-ui/slint/releases/download/v%s/Slint-cpp-%s-%s.tar.gz -O - | tar -zx",
+                    slint_version, slint_version, slint_os_infix)
             )
-        end
-        if os.host() == "macosx" then
+        elseif os.host() == "windows" then
             os.exec(
-                "wget -c https://github.com/slint-ui/slint/releases/download/v"
-                .. slint_version
-                .. "/Slint-cpp-"
-                .. slint_version
-                .. "-Darwin-arm64.tar.gz -O - | tar -zx"
+                string.format(
+                    "wget https://github.com/slint-ui/slint/releases/download/v%s/Slint-cpp-%s-win64-MSVC.exe",
+                    slint_version, slint_version)
             )
         end
     end)
@@ -450,6 +451,7 @@ task("fetch-slint", function()
     set_menu({
         usage = "xmake fetch-slint",
         description = "fetch slint binary release",
+        options = {},
     })
 end)
 
@@ -464,5 +466,6 @@ task("echo-cmd", function()
     set_menu({
         usage = "xmake echo-cmd",
         description = "show webrtc build commands",
+        options = {},
     })
 end)

@@ -1,39 +1,64 @@
 {
-    "name": "webrtc-rdp",
-    "dependencies": [
-        {
-            "name": "boost-asio",
-            "version>=": "1.86.0"
-        },
-        {
-            "name": "boost-beast",
-            "version>=": "1.86.0"
-        },
-        {
-            "name": "boost-url",
-            "version>=": "1.86.0"
-        },
-        {
-            "name": "boost-thread",
-            "version>=": "1.86.0"
-        },
-        {
-            "name": "ffmpeg",
-            "version>=": "5.1.2",
-            "features": [
-                "avcodec",
-                "avdevice",
-                "avformat",
-                "avresample"
-            ]
-        },
-        "fmt",
-        "spdlog",
-        "nlohmann-json",
-        "abseil",
-        "sdl2",
-        "sdl2-ttf",
-        "libyuv",
-        "freetype"
-    ]
+  "name": "webrtc-rdp",
+  "builtin-baseline": "b545373a9a536dc559dac8583467a21497a0e897",
+  "dependencies": [
+    {
+      "name": "boost-asio",
+      "version>=": "1.86.0"
+    },
+    {
+      "name": "boost-beast",
+      "version>=": "1.86.0"
+    },
+    {
+      "name": "boost-url",
+      "version>=": "1.86.0"
+    },
+    {
+      "name": "boost-thread",
+      "version>=": "1.86.0"
+    },
+    {
+      "name": "ffmpeg",
+      "version>=": "7.1#1",
+      "features": [
+        "avcodec",
+        "avdevice",
+        "avformat",
+        "avresample"
+      ]
+    },
+    {
+      "name": "fmt",
+      "version>=": "11.0.2"
+    },
+    {
+      "name": "spdlog",
+      "version>=": "1.15.0"
+    },
+    {
+      "name": "nlohmann-json",
+      "version>=": "3.11.3"
+    },
+    {
+      "name": "abseil",
+      "version>=": "20240722.0"
+    },
+    {
+      "name": "sdl2",
+      "version>=": "2.30.10"
+    },
+    {
+      "name": "sdl2-ttf",
+      "version>=": "2.22.0#1"
+    },
+    {
+      "name": "libyuv",
+      "version>=": "1896#1"
+    },
+    {
+      "name": "freetype",
+      "version>=": "2.13.3"
+    }
+  ]
 }
